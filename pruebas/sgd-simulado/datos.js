@@ -1,20 +1,35 @@
-/* Documentos de ejemplo del SGD simulado. Datos ficticios. */
-window.SGD_DOCUMENTOS = [
-  { id: 1, expediente: '2026-0048213', registro: '000154872', tipo: 'CARTA', numero: 'CARTA N° 117-2026-CONSORCIO VIAL SUR', asunto: 'Solicita ampliación de plazo N° 03 y reconocimiento de mayores gastos generales – Contrato de obra N° 012-2025', remitente: 'CONSORCIO VIAL SUR', dependencia: 'Mesa de Partes Central', fecha: '10/10/2026', estado: 'RECIBIDO', folios: 24 },
-  { id: 2, expediente: '2026-0048391', registro: '000154990', tipo: 'CÉDULA DE NOTIFICACIÓN', numero: 'EXP. 01452-2026-0-1801-JR-CA-04', asunto: 'Notifica Resolución N° 05 que fija fecha para audiencia de pruebas', remitente: '4° JUZGADO CONTENCIOSO ADMINISTRATIVO', dependencia: 'Mesa de Partes Central', fecha: '11/10/2026', estado: 'RECIBIDO', folios: 3 },
-  { id: 3, expediente: '2026-0048455', registro: '000155021', tipo: 'MEMORANDO', numero: 'MEMORANDO N° 322-2026-OA', asunto: 'Solicita opinión legal sobre resolución de contrato por incumplimiento del proveedor', remitente: 'Oficina de Abastecimiento', dependencia: 'Oficina de Abastecimiento', fecha: '12/10/2026', estado: 'DERIVADO', folios: 12 },
-  { id: 4, expediente: '2026-0048502', registro: '000155077', tipo: 'RECURSO', numero: 'RECURSO DE APELACIÓN S/N', asunto: 'Interpone recurso de apelación contra la Resolución Gerencial N° 233-2026', remitente: 'ROSA ELENA CÁRDENAS VILLANUEVA', dependencia: 'Mesa de Partes Virtual', fecha: '13/10/2026', estado: 'RECIBIDO', folios: 8 },
-  { id: 5, expediente: '2026-0048560', registro: '000155103', tipo: 'OFICIO', numero: 'OFICIO N° 0981-2026-MP-FPCEDCF', asunto: 'Requiere información para investigación fiscal preliminar', remitente: 'FISCALÍA PROVINCIAL ANTICORRUPCIÓN', dependencia: 'Mesa de Partes Central', fecha: '14/10/2026', estado: 'RECIBIDO', folios: 2 },
-  { id: 6, expediente: '2026-0048577', registro: '000155118', tipo: 'INFORME', numero: 'INFORME TÉCNICO N° 061-2026-DPP', asunto: 'Remite informe técnico favorable para la Adenda N° 2 del contrato de vigilancia', remitente: 'Dirección de Planeamiento y Presupuesto', dependencia: 'Dirección de Planeamiento y Presupuesto', fecha: '14/10/2026', estado: 'EN TRÁMITE', folios: 6 }
+/*
+ * SGD simulado con la estructura del SGD de SEDAPAR (ver docs/11-reconocimiento-sgd.md).
+ * Todos los datos son ficticios. Las rutas imitan el enrutador de Angular:
+ *   /sgd-simulado/pages/login · /tramites/mistramites · /tramites/detalletramite/{ID_INTERNO} · /pages/login/exit
+ */
+window.SGD_BASE = '/sgd-simulado';
+window.SGD_TRAMITES = [
+  { id: 250101, numero: '2026 - 01234 - 3', fecha: '10/10/2026 09:14:22', remitente: 'ÁREA DE LOGÍSTICA', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'SOLICITA OPINIÓN LEGAL SOBRE AMPLIACIÓN DE PLAZO DEL CONTRATO DE OBRA N° 012-2025', estado: 'DERIVADO', tipo: 'INFORME', asociados: [] },
+  { id: 250102, numero: '2026 - 00871 - 12', fecha: '11/10/2026 11:02:05', remitente: 'MESA DE PARTES', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'NOTIFICACIÓN JUDICIAL - DEMANDA CONTENCIOSO ADMINISTRATIVA', estado: 'DERIVADO', tipo: 'CÉDULA', asociados: ['2026 - 00871 - 11', '2026 - 00871 - 10'] },
+  { id: 250103, numero: '2025 - 04410 - 1', fecha: '18/12/2025 16:40:51', remitente: 'GERENCIA COMERCIAL', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'RECURSO DE APELACIÓN CONTRA RESOLUCIÓN DE GERENCIA COMERCIAL', estado: 'EN PROCESO', tipo: 'RECURSO', asociados: [] },
+  { id: 250104, numero: '2026 - 01301 - 1', fecha: '12/10/2026 08:30:00', remitente: 'ÓRGANO DE CONTROL INSTITUCIONAL', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'TRÁMITE RESERVADO', estado: 'DERIVADO', tipo: 'OFICIO', asociados: [], confidencial: true },
+  { id: 250105, numero: '2026 - 01322 - 2', fecha: '13/10/2026 15:21:47', remitente: 'GERENCIA DE OPERACIONES', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'REVISIÓN DE ADENDA AL CONTRATO DE SERVICIO DE VIGILANCIA', estado: 'DERIVADO', tipo: 'MEMORANDO', asociados: [] }
 ];
 window.SGD_SESION = {
   obtener() { try { return JSON.parse(sessionStorage.getItem('sgd.sesion')); } catch (e) { return null; } },
-  iniciar(usuario) { sessionStorage.setItem('sgd.sesion', JSON.stringify({ usuario: usuario.toUpperCase(), inicio: new Date().toISOString() })); },
+  iniciar(usuario) { sessionStorage.setItem('sgd.sesion', JSON.stringify({ usuario: usuario.toUpperCase() })); },
   cerrar() { sessionStorage.removeItem('sgd.sesion'); },
-  exigir() { const s = this.obtener(); if (!s) location.replace('index.html'); return s; }
+  exigir() { const s = this.obtener(); if (!s) location.replace(SGD_BASE + '/pages/login'); return s; }
 };
-window.SGD_CABECERA = function (sesion) {
-  return '<div class="barra"><span>Sistema de Gestión Documental · Entorno simulado</span>' +
-    '<span>Usuario: <span class="usuario-nombre">' + sesion.usuario + '</span> · <a href="logout.html">Cerrar sesión</a></span></div>' +
-    '<div class="menu"><a href="bandeja.html">Bandeja de documentos recibidos</a><a href="bandeja.html">Documentos emitidos</a><a href="bandeja.html">Consulta de expedientes</a></div>';
+/** Pinta el diseño autenticado (app-layout + sidebar-cmp) y devuelve el contenedor principal. */
+window.SGD_LAYOUT = function (sesion, componente) {
+  const raiz = document.querySelector('app-root');
+  raiz.innerHTML =
+    '<app-layout><div class="wrapper">' +
+      '<div class="sidebar" data-color="azure"><sidebar-cmp>' +
+        '<div class="logo">SGD · Simulado</div>' +
+        '<div class="usuario-sesion">' + sesion.usuario + '</div>' +
+        '<ul class="nav"><li><a href="' + SGD_BASE + '/tramites/mistramites">Mis Trámites</a></li>' +
+        '<li><a href="' + SGD_BASE + '/tramites/mistramites">Seg. de Trámites</a></li>' +
+        '<li><a href="' + SGD_BASE + '/pages/login/exit">Salir</a></li></ul>' +
+      '</sidebar-cmp></div>' +
+      '<div class="main-panel"><' + componente + '></' + componente + '></div>' +
+    '</div></app-layout>';
+  return raiz.querySelector(componente);
 };

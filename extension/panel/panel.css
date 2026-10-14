@@ -20,7 +20,7 @@
   color: var(--tinta);
 }
 * { box-sizing: border-box; }
-body { margin: 0; width: 420px; max-height: 600px; background: var(--fondo); }
+body { margin: 0; min-width: 300px; background: var(--fondo); }
 .oculto { display: none !important; }
 
 .cabecera {
@@ -38,6 +38,9 @@ body { margin: 0; width: 420px; max-height: 600px; background: var(--fondo); }
 .estado { display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--borde); background: var(--superficie); }
 .estado p { margin: 2px 0 0; color: var(--tinta-2); font-size: 12px; }
 .estado .btn { margin-top: 8px; }
+.estado > div:not(.estado__icono) { flex: 1; min-width: 0; }
+.aviso a { white-space: nowrap; font-weight: 600; }
+.estado--verificando .acciones-estado { display: none; }
 .estado__icono { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: none; background: var(--tenue); }
 .estado--activa .estado__icono { background: var(--exito); box-shadow: 0 0 0 3px var(--exito-fondo); }
 .estado--inactiva .estado__icono { background: var(--error); box-shadow: 0 0 0 3px var(--error-fondo); }
@@ -51,7 +54,7 @@ body { margin: 0; width: 420px; max-height: 600px; background: var(--fondo); }
 .pestana.activa { color: var(--azul); border-bottom-color: var(--azul); }
 .contador { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--fondo); font-size: 11px; }
 
-.panel { padding: 10px 12px 12px; overflow-y: auto; max-height: 470px; }
+.panel { padding: 10px 12px 16px; }
 .bloque { border: 1px solid var(--borde); background: var(--superficie); border-radius: 8px; padding: 10px 12px 12px; margin: 0 0 10px; }
 .bloque legend { font-weight: 700; color: var(--azul); padding: 0 4px; display: flex; align-items: center; gap: 6px; }
 .paso { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--azul); color: #fff; font-size: 11px; }
@@ -122,3 +125,8 @@ input.leido { background: #f3f8f3; border-color: #b9d9c3; }
 .conexion--ok { background: var(--exito-fondo); color: var(--exito); }
 .conexion--error { background: var(--alerta-fondo); color: var(--alerta); }
 .btn:disabled { opacity: .6; cursor: wait; }
+
+/* Campos según el perfil del SGD */
+body[data-perfil="sedapar"] [data-solo="generico"], body:not([data-perfil="sedapar"]) [data-solo="sedapar"] { display: none !important; }
+input[readonly] { background: #f3f8f3; }
+@media (max-width: 360px) { .rejilla, .filtros { grid-template-columns: 1fr; } }

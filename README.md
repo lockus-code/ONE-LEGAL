@@ -36,7 +36,20 @@ N.° de expediente, N.° de registro / CUT / hoja de ruta, tipo y N.° de docume
 4. Se abrirá **Configuración** (también disponible con clic derecho sobre el ícono → *Opciones*):
    - **Dirección(es) del SGD**: el prefijo de la URL del SGD institucional, por ejemplo `https://sgd.institucion.gob.pe/`. Al guardar, Chrome pide permiso de lectura sobre ese dominio, que hace falta para leer los marcos internos (iframes) del SGD.
    - **Indicadores de sesión**: los selectores que vienen por defecto (`a[href*='logout']`, `a[href*='salir']`…) cubren los casos más comunes. Si el ícono no se habilita con la sesión abierta, inspeccione el botón *Cerrar sesión* del SGD y agregue un selector simple, por ejemplo `#lnkSalir`. También puede usar el modo *En cualquier página del SGD*; la sesión se sigue verificando al abrir la extensión.
-5. Recargar la pestaña del SGD, iniciar sesión, abrir un trámite y pulsar el ícono **LEGAL**.
+5. Recargar la pestaña del SGD, iniciar sesión, abrir un trámite y pulsar el ícono **LEGAL**: se abre el **panel lateral de Chrome**, que sigue a la pestaña activa y vuelve a leer la página al cambiar de trámite.
+
+### SGD de SEDAPAR (`https://sgd.sedapar.com.pe`)
+
+Viene configurado de fábrica (`shared/entorno.js` y `host_permissions`) y usa un lector propio, `shared/lector-sedapar.js`, construido a partir del reconocimiento estructural (`docs/11-reconocimiento-sgd.md`):
+
+- Actúa en la página de detalle `/tramites/detalletramite/{ID}`. En la bandeja y en otras páginas el panel pide abrir un trámite.
+- Espera hasta 10 s a que Angular pinte el trámite (MutationObserver).
+- Lee **solo** el n.º de trámite y el ID interno de la URL. El n.º se obtiene con las estrategias P → R1 → R2 y la regla de consenso, y se normaliza a `AAAA-#####-S`. También toma la fecha de ingreso de la última fila de «MOVIMIENTO DEL EXPEDIENTE». El enlace directo es `https://sgd.sedapar.com.pe/tramites/detalletramite/{ID}`.
+- **No lee** la tarjeta «DATOS DEL SOLICITANTE», el asunto, el contenido, los nombres de servidores, el menú lateral, el almacenamiento web ni las cookies. El asunto lo redacta el usuario.
+- Si el número es ambiguo o no aparece, pasa a registro manual con validación del formato.
+- Si el trámite muestra el componente de confidencialidad con contenido (riesgo R7), no lee ni registra nada.
+- La sesión se reconoce por el diseño autenticado (`app-layout`, `sidebar-cmp`) fuera de `/pages/login`.
+- Si el trámite ya está vinculado a algún proceso, el panel lo avisa.
 
 ### Prueba sin el SGD real
 
@@ -82,7 +95,7 @@ Un único ejecutable de Windows que se inicia con **doble clic, sin ventana de c
 2. Copia la **extensión ya configurada** en `%LOCALAPPDATA%\LEGAL-Prueba\extension-conector-sgd`, apuntando al SGD simulado y al servidor local.
 3. Levanta el servidor en `http://localhost:8790`, accesible solo desde el propio equipo:
    - `/`: Centro de pruebas, con los pasos, el estado de la BD, las últimas vinculaciones y el botón para reiniciar la BD.
-   - `/sgd-simulado/`: SGD simulado.
+   - `/sgd-simulado/`: SGD simulado con la estructura y las rutas del SGD de SEDAPAR (`/pages/login`, `/tramites/mistramites`, `/tramites/detalletramite/{ID}`), con carga asíncrona, trámites asociados, un trámite confidencial y datos ficticios.
    - `/portal/`: Portal LEGAL. Lee y guarda en la BD e incorpora cada 8 segundos lo que registra el Conector.
    - `/api/…`: API que usa el Conector (catálogo, registro de vinculaciones con las reglas de negocio) y el portal.
 4. Abre el Centro de pruebas en el navegador y muestra un ícono **LEGAL** en la bandeja del sistema, junto al reloj. Desde ese ícono se abren el portal, el SGD simulado y las carpetas, o se detiene con **Detener y salir**.

@@ -34,6 +34,7 @@
     configurado: (config) => Boolean(base(config)),
     estado: (config) => pedir(config, '/api/estado'),
     catalogo: (config) => pedir(config, '/api/catalogo'),
+    consultarTramite: (config, numero) => pedir(config, `/api/tramites-sgd?numero=${encodeURIComponent(numero)}`),
     registrarVinculacion: (config, datos) => pedir(config, '/api/vinculaciones', { method: 'POST', body: JSON.stringify(datos) }, 5000)
   };
 })(typeof self !== 'undefined' ? self : this);

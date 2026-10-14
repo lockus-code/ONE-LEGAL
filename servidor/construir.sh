@@ -3,7 +3,7 @@
 # y el SGD simulado embebidos. Requiere Go 1.22+ y Node.js (solo para generar el catálogo semilla).
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.3.0}"
 
 rm -rf web && mkdir -p web dist
 cp -r ../portal web/portal

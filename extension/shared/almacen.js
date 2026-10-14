@@ -24,6 +24,10 @@
     // Indicadores de sesión activa: selectores CSS simples (sin combinadores),
     // usados también por el activador del ícono de la extensión.
     selectoresSesion: [
+      // SGD de SEDAPAR (Angular): diseño autenticado y enlace de salida.
+      'app-layout',
+      'sidebar-cmp',
+      "a[href*='/pages/login/exit']",
       "a[href*='logout']",
       "a[href*='Logout']",
       "a[href*='logoff']",
@@ -63,7 +67,11 @@
 
   async function obtenerConfiguracion() {
     const guardada = await obtener(CLAVES.CONFIG, {});
-    return Object.assign({}, CONFIG_PREDETERMINADA, guardada);
+    const config = Object.assign({}, CONFIG_PREDETERMINADA, guardada);
+    // Las direcciones del entorno (entorno.js) siempre se conservan.
+    const delEntorno = (global.LEGAL_ENTORNO && global.LEGAL_ENTORNO.urlsSgd) || [];
+    config.urlsSgd = [...new Set([...delEntorno, ...(config.urlsSgd || [])])];
+    return config;
   }
 
   async function obtenerCatalogo() {

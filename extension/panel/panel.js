@@ -1,7 +1,8 @@
 /*
- * LEGAL · Conector SGD — Ventana emergente.
+ * LEGAL · Conector SGD — Panel lateral de Chrome.
  * Flujo: verificar sesión SGD → leer trámite (solo lectura) → elegir vinculación
- * (proceso existente no finalizado o nuevo proceso) → registrar localmente.
+ * (proceso existente no finalizado o nuevo proceso) → registrar en LEGAL.
+ * El panel sigue a la pestaña activa: al cambiar de trámite o de pestaña se vuelve a leer.
  */
 (function () {
   const A = window.LegalAlmacen;
@@ -12,7 +13,30 @@
   const CAMPOS_TRAMITE = ['nroExpediente', 'nroRegistro', 'tipoDocumento', 'nroDocumento', 'asunto', 'remitente', 'dependencia', 'fechaDocumento', 'estadoSgd'];
   const ESTADO_FINALIZADO = window.LEGAL_CATALOGO.ESTADOS_PROCESO.FINALIZADO;
 
-  const estado = { config: null, catalogo: null, tab: null, lectura: null, urlDepurada: '', servidor: null };
+  const estado = { config: null, catalogo: null, tab: null, lectura: null, urlDepurada: '', servidor: null, perfil: 'generico', claveTramite: null };
+  const RE_TRAMITE_SEDAPAR = /(?<!\d)(20\d{2})\s*[-\u2010-\u2015]\s*(\d{1,5})\s*[-\u2010-\u2015]\s*(\d{1,3})(?!\d)/;
+  const normalizarTramite = (t) => { const m = String(t || '').match(RE_TRAMITE_SEDAPAR); return m ? `${m[1]}-${m[2].padStart(5, '0')}-${parseInt(m[3], 10)}` : null; };
+  const MOTIVOS = {
+    NO_NODE: 'no apareció el n.º de trámite en 10 segundos',
+    AMBIGUOUS: 'la página muestra números distintos y no se puede decidir cuál es'
+  };
+
+  /** Perfil de lectura según la dirección: el SGD de SEDAPAR (o su simulación) tiene lector propio. */
+  function perfilPara(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname === 'sgd.sedapar.com.pe' || u.pathname.startsWith('/sgd-simulado/')) return 'sedapar';
+    } catch (e) { /* URL no válida */ }
+    return 'generico';
+  }
+
+  function aplicarPerfil(perfil) {
+    estado.perfil = perfil;
+    document.body.dataset.perfil = perfil;
+    document.querySelectorAll('[data-generico]').forEach((el) => { el.textContent = el.dataset[perfil] || el.dataset.generico; });
+    campo('nroRegistro').readOnly = perfil === 'sedapar';
+    campo('fechaDocumento').readOnly = perfil === 'sedapar';
+  }
   const S = window.LegalServidor;
 
   // ---------------------------------------------------------------- utilidades
@@ -69,7 +93,17 @@
   }
 
   // ------------------------------------------------------- 1. sesión y lectura
-  async function leerPestana(tabId) {
+  async function leerPestana(tabId, url) {
+    if (perfilPara(url) === 'sedapar') {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId }, func: leerPaginaSedapar, args: [{ topeMs: 10000 }] });
+      const l = r.result;
+      const datos = {};
+      if (l.numero) datos.nroExpediente = l.numero;
+      if (l.idInterno) datos.nroRegistro = l.idInterno;
+      if (l.fechaIngreso) datos.fechaDocumento = l.fechaIngreso;
+      const fuentes = { nroExpediente: 'número del encabezado «DATOS DEL EXPEDIENTE»', nroRegistro: 'dirección de la página', fechaDocumento: 'última fila de «MOVIMIENTO DEL EXPEDIENTE»' };
+      return { principal: l, datos, fuentes, indicadorSesion: l.sesion.indicador, usuarioSgd: '', formularioIngreso: l.sesion.formularioIngreso, seleccion: '', sedapar: l };
+    }
     const args = [{ selectoresSesion: estado.config.selectoresSesion, textosSesion: estado.config.textosSesion }];
     let resultados;
     try {
@@ -103,25 +137,37 @@
       mostrarEstado('advertencia', 'Configuración pendiente', 'Registre la dirección del SGD institucional para habilitar el conector.', true);
       return false;
     }
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     estado.tab = tab;
     const url = tab && tab.url ? tab.url : '';
     if (!estado.config.urlsSgd.some((base) => url.startsWith(base))) {
-      mostrarEstado('inactiva', 'La pestaña activa no corresponde al SGD', 'Abra el Sistema de Gestión Documental en esta pestaña e inicie sesión.', true);
+      mostrarEstado('inactiva', 'La pestaña activa no corresponde al SGD', 'Abra el Sistema de Gestión Documental e inicie sesión. Este panel se actualiza solo al cambiar de pestaña.', true);
       return false;
     }
+    aplicarPerfil(perfilPara(url));
+    mostrarEstado('verificando', 'Leyendo la página del SGD…', estado.perfil === 'sedapar' ? 'Esperando a que el SGD termine de cargar el trámite (hasta 10 s).' : '');
     try {
-      estado.lectura = await leerPestana(tab.id);
+      estado.lectura = await leerPestana(tab.id, url);
     } catch (e) {
-      mostrarEstado('inactiva', 'No fue posible leer la página del SGD', e.message);
+      mostrarEstado('inactiva', 'No fue posible leer la página del SGD', `${e.message} Recargue la pestaña del SGD; si persiste, revise el permiso de la extensión sobre este sitio.`);
       return false;
     }
     const l = estado.lectura;
     if (!l.indicadorSesion || l.formularioIngreso) {
-      mostrarEstado('inactiva', 'Sin sesión activa en el SGD', 'Inicie sesión en el SGD y vuelva a abrir el conector. Por regla institucional, la captura solo procede con sesión vigente.', true);
+      mostrarEstado('inactiva', 'Sin sesión activa en el SGD', 'Inicie sesión en el SGD. Por regla institucional, la captura solo procede con sesión vigente.', false);
       return false;
     }
-    mostrarEstado('activa', 'Sesión SGD activa', l.usuarioSgd ? `Usuario SGD: ${l.usuarioSgd}` : `Indicador detectado: ${l.indicadorSesion}`);
+    if (l.sedapar) {
+      if (!l.sedapar.esDetalle) {
+        mostrarEstado('activa', 'Sesión SGD activa', 'Abra el detalle de un trámite («Ingresar al Trámite» en Mis Trámites) para vincularlo a LEGAL.');
+        return false;
+      }
+      if (l.sedapar.confidencial) {
+        mostrarEstado('advertencia', 'Trámite con indicador de confidencialidad', 'Por precaución no se lee ni se registra ningún dato de este trámite. Consulte con el oficial de datos personales antes de vincularlo.');
+        return false;
+      }
+    }
+    mostrarEstado('activa', 'Sesión SGD activa', l.sedapar ? `Trámite ${l.sedapar.numero || 'sin número detectado'} · ID interno ${l.sedapar.idInterno}` : (l.usuarioSgd ? `Usuario SGD: ${l.usuarioSgd}` : `Indicador detectado: ${l.indicadorSesion}`));
     return true;
   }
 
@@ -134,7 +180,15 @@
       input.title = datos[k] ? `Leído automáticamente (${fuentes[k]})` : 'No identificado: puede completarlo manualmente';
     });
     const n = CAMPOS_TRAMITE.filter((k) => datos[k]).length;
-    $('#resumen-lectura').textContent = `Lectura automática: ${n} de ${CAMPOS_TRAMITE.length} datos identificados. Verifique y complete antes de registrar.`;
+    const sp = estado.lectura.sedapar;
+    if (sp) {
+      campo('nroExpediente').readOnly = Boolean(sp.numero);
+      $('#resumen-lectura').textContent = sp.numero
+        ? `N.º de trámite leído del encabezado (estrategias: ${Object.entries(sp.estrategias || {}).filter(([, v]) => v).map(([k]) => k).join(', ')}) en ${(sp.msDeteccion / 1000).toFixed(1)} s. Redacte el asunto y elija la vinculación.`
+        : `Registro manual: ${MOTIVOS[sp.motivo] || 'no se pudo leer el n.º de trámite'}. Escriba el número tal como aparece en pantalla (AAAA - ##### - S).`;
+    } else {
+      $('#resumen-lectura').textContent = `Lectura automática: ${n} de ${CAMPOS_TRAMITE.length} datos identificados. Verifique y complete antes de registrar.`;
+    }
     $('#seleccion').classList.toggle('oculto', !seleccion);
     estado.urlDepurada = depurarUrl(principal.url, estado.config.parametrosSensibles);
     campo('enlaceSgd').dataset.editado = '';
@@ -219,6 +273,11 @@
       errores.push('N.° de expediente o de registro');
     }
     exigir('asunto', 'asunto del documento');
+    if (estado.perfil === 'sedapar') {
+      const canon = normalizarTramite(campo('nroExpediente').value);
+      if (!canon) { campo('nroExpediente').classList.add('invalido'); errores.push('N.º de trámite con el formato AAAA - ##### - S'); }
+      else campo('nroExpediente').value = canon;
+    }
     exigir('enlaceSgd', 'enlace directo');
     if (modoActual() === 'nuevo') {
       exigir('categoria', 'categoría');
@@ -279,7 +338,7 @@
       id: `TSGD-${Date.now().toString(36).toUpperCase()}`,
       ...datosTramite,
       enlaceSgd: campo('enlaceSgd').value.trim(),
-      tituloPagina: estado.lectura.principal.titulo,
+      tituloPagina: estado.perfil === 'sedapar' ? null : estado.lectura.principal.titulo,
       vinculacion: {
         modo: modoActual(),
         procesoCodigo: proceso.codigo,
@@ -317,6 +376,7 @@
     campo('denominacion').value = '';
     cambiarModo();
     await pintarIndexados();
+    await consultarRegistro();
     mostrarMensaje('exito', tramite.vinculacion.modo === 'nuevo'
       ? `Se generó el proceso ${proceso.codigo} y se indexó el trámite${estado.servidor && estado.servidor.conectado ? ' en la base de datos LEGAL' : ''}.`
       : `Trámite indexado en el proceso ${proceso.codigo}${estado.servidor && estado.servidor.conectado ? ' (registrado en la base de datos LEGAL)' : ''}.`);
@@ -402,10 +462,8 @@
     campo('enlaceSgd').addEventListener('input', () => { campo('enlaceSgd').dataset.editado = '1'; });
     form.addEventListener('input', () => { delete form.dataset.confirmarDuplicado; });
     $('#btn-usar-seleccion').addEventListener('click', () => { campo('asunto').value = estado.lectura.seleccion; });
-    $('#btn-releer').addEventListener('click', async () => {
-      try { estado.lectura = await leerPestana(estado.tab.id); volcarLectura(); mostrarMensaje('info', 'Página leída nuevamente.'); }
-      catch (e) { mostrarMensaje('error', `No fue posible leer la página: ${e.message}`); }
-    });
+    $('#btn-releer').addEventListener('click', () => actualizar(true));
+    $('#btn-reverificar').addEventListener('click', () => actualizar(true));
     $('#filtro-indexados').addEventListener('input', pintarIndexados);
     $('#btn-exportar').addEventListener('click', exportar);
     $('#lista-indexados').addEventListener('click', async (ev) => {
@@ -416,15 +474,61 @@
     });
   }
 
-  async function iniciar() {
-    enlazarEventos();
-    if (!(await verificarSesion())) return;
+  // ------------------------------------------------- ¿trámite ya vinculado?
+  async function consultarRegistro() {
+    const caja = $('#aviso-tramite');
+    caja.classList.add('oculto');
+    const numero = campo('nroExpediente').value.trim();
+    if (!numero) return;
+    let vinculos = [];
+    if (estado.servidor && estado.servidor.conectado) {
+      try { vinculos = (await S.consultarTramite(estado.config, numero)).vinculaciones; } catch (e) { return; }
+    } else {
+      vinculos = (await A.obtenerTramites()).filter((t) => t.nroExpediente === numero).map((t) => ({ ...t.vinculacion, fechaCaptura: t.fechaCaptura }));
+    }
+    if (!vinculos.length) return;
+    const portal = estado.servidor && estado.servidor.conectado ? `${estado.config.servidorLegal.replace(/\/+$/, '')}/portal/#sgd` : null;
+    caja.className = 'aviso aviso--alerta';
+    caja.innerHTML = `<span>Este trámite ya está vinculado a ${vinculos.map((v) => `<strong>${escapar(v.procesoCodigo)}</strong>`).join(', ')}.
+      Puede anexarlo a otro proceso si corresponde.</span>${portal ? `<a href="${escapar(portal)}" target="_blank" rel="noopener">Ver en el portal</a>` : ''}`;
+  }
+
+  // ------------------------------------------- seguimiento de la pestaña activa
+  let ejecucion = 0;
+  async function actualizar(forzar) {
+    const mia = ++ejecucion;
+    const ok = await verificarSesion();
+    if (mia !== ejecucion) return; // otra actualización más reciente tomó el control
+    if (!ok) {
+      $('#principal').classList.add('oculto');
+      estado.claveTramite = null;
+      return;
+    }
     await cargarCatalogo();
+    if (mia !== ejecucion) return;
+    const clave = `${estado.lectura.principal.url}|${estado.lectura.datos.nroExpediente || ''}`;
     $('#principal').classList.remove('oculto');
-    volcarLectura();
-    cambiarModo();
+    if (forzar || clave !== estado.claveTramite) {
+      const otroTramite = clave !== estado.claveTramite;
+      estado.claveTramite = clave;
+      volcarLectura();
+      if (otroTramite) {
+        campo('asuntoVinculacion').value = '';
+        campo('denominacion').value = '';
+        $('#mensaje').className = 'aviso oculto';
+      }
+      cambiarModo();
+      await consultarRegistro();
+    }
     pintarIndexados();
   }
 
-  iniciar();
+  let temporizador = null;
+  const programar = () => { clearTimeout(temporizador); temporizador = setTimeout(() => actualizar(false), 350); };
+  chrome.tabs.onActivated.addListener(programar);
+  chrome.tabs.onUpdated.addListener((tabId, cambio, tab) => { if (tab.active && (cambio.url || cambio.status === 'complete')) programar(); });
+  chrome.windows.onFocusChanged.addListener((id) => { if (id !== chrome.windows.WINDOW_ID_NONE) programar(); });
+
+  enlazarEventos();
+  actualizar(true);
 })();

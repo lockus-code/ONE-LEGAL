@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16">
+    <form class="login" id="ingreso">
+      <h3>Sistema de Gestión Documental · Simulado</h3>
+      <div class="aviso">Entorno de pruebas con datos ficticios. Ingrese cualquier usuario y contraseña.</div>
+      <label for="usuario">Usuario</label><input id="usuario" value="usuario.prueba">
+      <label for="clave">Contraseña</label><input id="clave" type="password">
+      <button class="btn" type="submit">Ingresar</button>
+      <p id="error" style="color:#b00"></p>
+    </form>
+  </app-root>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    if (SGD_SESION.obtener()) location.replace(SGD_BASE + '/tramites/mistramites');
+    document.getElementById('ingreso').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var u = document.getElementById('usuario').value.trim(), c = document.getElementById('clave').value;
+      if (!u || !c) { document.getElementById('error').textContent = 'Ingrese usuario y contraseña.'; return; }
+      SGD_SESION.iniciar(u);
+      location.href = SGD_BASE + '/tramites/mistramites';
+    });
+  </script>
+</body>
+</html>

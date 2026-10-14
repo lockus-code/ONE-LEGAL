@@ -40,7 +40,7 @@ var iconoICO []byte
 //go:embed recursos/icono.png
 var iconoPNG []byte
 
-var version = "0.2.0"
+var version = "0.3.0"
 
 func main() {
 	sinBandeja := flag.Bool("sin-bandeja", false, "no mostrar el ícono en la bandeja del sistema")
@@ -200,7 +200,7 @@ func extraerExtension(web fs.FS, destino, base string) error {
 		return err
 	}
 	entorno := map[string]any{
-		"urlsSgd":        []string{base + "sgd-simulado/"},
+		"urlsSgd":        []string{base + "sgd-simulado/", "https://sgd.sedapar.com.pe/"},
 		"servidorLegal":  strings.TrimSuffix(base, "/"),
 		"usuarioLegal":   "usuario.prueba",
 		"modoActivacion": "indicador",

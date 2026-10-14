@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -70,6 +72,7 @@ func (s *Servidor) Rutas() http.Handler {
 	mux.HandleFunc("/api/vinculaciones", s.manejarVinculaciones)
 	mux.HandleFunc("/api/portal", s.manejarPortal)
 	mux.HandleFunc("/api/reiniciar", s.manejarReiniciar)
+	mux.HandleFunc("/api/tramites-sgd", s.manejarConsultaTramite)
 
 	estatico := func(dir string) http.Handler {
 		sub, err := fs.Sub(s.web, dir)
@@ -79,7 +82,7 @@ func (s *Servidor) Rutas() http.Handler {
 		return http.FileServer(http.FS(sub))
 	}
 	mux.Handle("/portal/", http.StripPrefix("/portal/", estatico("portal")))
-	mux.Handle("/sgd-simulado/", http.StripPrefix("/sgd-simulado/", estatico("sgd-simulado")))
+	mux.Handle("/sgd-simulado/", s.sgdSimulado(estatico("sgd-simulado")))
 	mux.Handle("/", estatico("centro"))
 	return s.cabeceras(mux)
 }
@@ -284,6 +287,68 @@ func (s *Servidor) registrarVinculacion(w http.ResponseWriter, r *http.Request) 
 	}
 	log.Printf("Vinculación registrada: %s → %s (%s)", id, proceso.Codigo, texto(vinc, "modo"))
 	responder(w, http.StatusCreated, map[string]any{"tramite": t, "proceso": proceso})
+}
+
+// manejarConsultaTramite responde si un n.º de trámite SGD ya está vinculado a procesos.
+func (s *Servidor) manejarConsultaTramite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		metodoNoPermitido(w)
+		return
+	}
+	numero := strings.TrimSpace(r.URL.Query().Get("numero"))
+	if numero == "" {
+		rechazar(w, http.StatusBadRequest, "Indique el número de trámite.")
+		return
+	}
+	tramites, err := s.bd.Listar(colTramites)
+	if err != nil {
+		errorInterno(w, err)
+		return
+	}
+	vinculaciones := []map[string]any{}
+	for _, raw := range tramites {
+		var t map[string]any
+		if json.Unmarshal(raw, &t) != nil || texto(t, "nroExpediente") != numero {
+			continue
+		}
+		v := mapa(t, "vinculacion")
+		vinculaciones = append(vinculaciones, map[string]any{
+			"procesoCodigo":       texto(v, "procesoCodigo"),
+			"procesoDenominacion": texto(v, "procesoDenominacion"),
+			"modo":                texto(v, "modo"),
+			"fechaCaptura":        texto(t, "fechaCaptura"),
+		})
+	}
+	responder(w, http.StatusOK, map[string]any{"numero": numero, "registrado": len(vinculaciones) > 0, "vinculaciones": vinculaciones})
+}
+
+var rutaDetalleSimulado = regexp.MustCompile(`^tramites/detalletramite/\d+/?$`)
+
+// sgdSimulado reproduce las rutas del SGD de SEDAPAR (enrutador HTML5 de Angular)
+// sobre páginas estáticas de prueba.
+func (s *Servidor) sgdSimulado(archivos http.Handler) http.Handler {
+	paginas := map[string]string{
+		"":                     "login.html",
+		"pages/login":          "login.html",
+		"pages/login/exit":     "salir.html",
+		"tramites/mistramites": "mistramites.html",
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ruta := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/sgd-simulado/"), "/")
+		pagina, ok := paginas[ruta]
+		if !ok && rutaDetalleSimulado.MatchString(ruta) {
+			pagina, ok = "detalletramite.html", true
+		}
+		if ok {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = "/" + pagina
+			archivos.ServeHTTP(w, r2)
+			return
+		}
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/" + path.Clean(ruta)
+		archivos.ServeHTTP(w, r2)
+	})
 }
 
 func (s *Servidor) manejarPortal(w http.ResponseWriter, r *http.Request) {

@@ -2,8 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LEGAL · Conector SGD</title>
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="panel.css">
 </head>
 <body>
   <header class="cabecera">
@@ -22,7 +23,10 @@
     <div>
       <strong id="estado-titulo">Verificando sesión en el SGD…</strong>
       <p id="estado-detalle"></p>
-      <button id="btn-configurar" class="btn btn--secundario oculto" type="button">Abrir configuración</button>
+      <div class="acciones-linea acciones-estado">
+        <button id="btn-reverificar" class="btn btn--secundario" type="button">Volver a verificar</button>
+        <button id="btn-configurar" class="btn btn--secundario oculto" type="button">Abrir configuración</button>
+      </div>
     </div>
   </section>
 
@@ -37,18 +41,20 @@
       <fieldset class="bloque">
         <legend><span class="paso">1</span> Datos del trámite SGD</legend>
         <p class="ayuda" id="resumen-lectura"></p>
+        <div id="aviso-tramite" class="aviso oculto" role="status"></div>
         <div class="rejilla">
-          <label>N.° de expediente<input name="nroExpediente" autocomplete="off"></label>
-          <label>N.° de registro / CUT<input name="nroRegistro" autocomplete="off"></label>
-          <label>Tipo de documento<input name="tipoDocumento" autocomplete="off"></label>
-          <label>N.° de documento<input name="nroDocumento" autocomplete="off"></label>
-          <label class="ancho">Asunto del documento<textarea name="asunto" rows="2"></textarea></label>
-          <label>Remitente<input name="remitente" autocomplete="off"></label>
-          <label>Dependencia de origen<input name="dependencia" autocomplete="off"></label>
-          <label>Fecha del documento<input name="fechaDocumento" autocomplete="off"></label>
-          <label>Estado en el SGD<input name="estadoSgd" autocomplete="off"></label>
+          <label><span data-generico="N.° de expediente" data-sedapar="N.° de trámite SGD">N.° de expediente</span><input name="nroExpediente" autocomplete="off"></label>
+          <label><span data-generico="N.° de registro / CUT" data-sedapar="ID interno SGD">N.° de registro / CUT</span><input name="nroRegistro" autocomplete="off"></label>
+          <label data-solo="generico">Tipo de documento<input name="tipoDocumento" autocomplete="off"></label>
+          <label data-solo="generico">N.° de documento<input name="nroDocumento" autocomplete="off"></label>
+          <label class="ancho"><span data-generico="Asunto del documento" data-sedapar="Asunto (redáctelo usted)">Asunto del documento</span><textarea name="asunto" rows="2"></textarea></label>
+          <p class="ayuda ancho" data-solo="sedapar">Por protección de datos personales, el conector no copia el asunto, el contenido ni los datos del solicitante del SGD.</p>
+          <label data-solo="generico">Remitente<input name="remitente" autocomplete="off"></label>
+          <label data-solo="generico">Dependencia de origen<input name="dependencia" autocomplete="off"></label>
+          <label><span data-generico="Fecha del documento" data-sedapar="Fecha de ingreso">Fecha del documento</span><input name="fechaDocumento" autocomplete="off"></label>
+          <label data-solo="generico">Estado en el SGD<input name="estadoSgd" autocomplete="off"></label>
         </div>
-        <div id="seleccion" class="aviso aviso--info oculto">
+        <div id="seleccion" class="aviso aviso--info oculto" data-solo="generico">
           <span>Hay texto seleccionado en la página.</span>
           <button type="button" class="enlace" id="btn-usar-seleccion">Usar como asunto</button>
         </div>
@@ -118,7 +124,8 @@
   <script src="../shared/catalogo.js"></script>
   <script src="../shared/almacen.js"></script>
   <script src="../shared/lector.js"></script>
+  <script src="../shared/lector-sedapar.js"></script>
   <script src="../shared/servidor.js"></script>
-  <script src="popup.js"></script>
+  <script src="panel.js"></script>
 </body>
 </html>

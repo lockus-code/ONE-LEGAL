@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    var sesion = SGD_SESION.exigir();
+    if (sesion) {
+      var id = Number(location.pathname.match(/detalletramite\/(\d+)/)[1]);
+      var t = SGD_TRAMITES.find(function (x) { return x.id === id; });
+      var c = SGD_LAYOUT(sesion, 'app-detalletramite');
+      c.innerHTML = '<div class="cargando">Cargando trámite…</div>';
+      setTimeout(function () { // imita getTramite (~1 s)
+        if (!t) { c.innerHTML = '<div class="cargando">Trámite no encontrado.</div>'; return; }
+        var card = function (titulo, cuerpo) { return '<div class="card"><div class="header"><legend class="title">' + titulo + '</legend></div><div class="content">' + cuerpo + '</div></div>'; };
+        c.innerHTML =
+          '<div class="main-content"><div class="container-fluid">' +
+          '<tramites-detalle-tramite-confidential>' + (t.confidencial ? '<div class="confidencial">TRÁMITE CONFIDENCIAL</div>' : '') + '</tramites-detalle-tramite-confidential>' +
+          '<div class="row">' +
+            '<div class="col-md-6">' + card('DATOS DEL SOLICITANTE',
+              '<div class="campo"><b>SOLICITANTE</b>PERSONA DE PRUEBA FICTICIA</div><div class="campo"><b>DIRECCIÓN</b>AV. EJEMPLO 000</div>' +
+              '<div class="campo"><b>EMAIL</b>persona@ejemplo.invalid</div><div class="campo"><b>CELULAR</b>900 000 000</div>') + '</div>' +
+            '<div class="col-md-6"><div class="row"><div class="col-md-12"><div class="card"><div class="header"><legend class="title"><div class="row">' +
+              '<div class="col-sm-5">DATOS DEL EXPEDIENTE <strong>' + t.numero + '</strong> <i class="fa fa-file-pdf-o" title="PDF"></i></div>' +
+              '<div class="col-sm-7" style="text-align:right">' + t.tipo + '</div></div></legend></div>' +
+              '<div class="content"><div class="campo"><b>ASUNTO</b>' + t.asunto + '</div><div class="campo"><b>CONTENIDO</b>Texto de prueba del contenido del documento.</div>' +
+              '<form method="get"><select name="firmamotivo" disabled><option>Soy el autor del documento</option></select> <button type="button" class="btn">Derivar</button></form></div></div></div></div></div>' +
+          '</div>' +
+          '<div class="row"><div class="col-md-12">' +
+            card('MOVIMIENTO DEL EXPEDIENTE', '<table class="table"><thead><tr><th>Fecha</th><th>Area</th><th>Estado</th><th>Usuario</th></tr></thead><tbody>' +
+              '<tr><td>14/10/2026 10:05:11</td><td>GERENCIA DE ASESORÍA JURÍDICA</td><td>' + t.estado + '</td><td>USUARIO FICTICIO 2</td></tr>' +
+              '<tr><td>' + t.fecha + '</td><td>TRÁMITE DOCUMENTARIO</td><td>REGISTRADO</td><td>USUARIO FICTICIO 1</td></tr></tbody></table>') +
+            card('TRÁMITES ASOCIADOS', '<table class="table"><thead><tr><th>Trámite</th><th>Asunto</th></tr></thead><tbody>' +
+              (t.asociados.length ? t.asociados.map(function (a) { return '<tr><td>' + a + '</td><td>Documento asociado de prueba</td></tr>'; }).join('') : '<tr><td colspan="2">Sin trámites asociados</td></tr>') + '</tbody></table>') +
+          '</div></div></div></div>';
+      }, 1100);
+    }
+  </script>
+</body>
+</html>

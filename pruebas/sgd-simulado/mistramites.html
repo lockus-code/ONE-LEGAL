@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    var sesion = SGD_SESION.exigir();
+    if (sesion) {
+      var c = SGD_LAYOUT(sesion, 'app-mistramites');
+      c.innerHTML = '<div class="cargando">Cargando…</div>';
+      setTimeout(function () { // imita la llamada getTramites (~1 s)
+        c.innerHTML = '<div class="card"><div class="header"><legend class="title">MIS TRÁMITES</legend></div><div class="content">' +
+          '<div class="aviso">SGD simulado: datos ficticios.</div>' +
+          '<table class="table table-xs table-hover scroll-table"><thead><tr><th></th><th>Expediente</th><th>Fecha de Solicitud</th><th>Remitente</th><th>Derivado a</th><th>Asunto</th><th>Estado</th><th>Adjuntos</th><th>Acciones</th></tr></thead><tbody>' +
+          SGD_TRAMITES.map(function (t, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><p class="scroll-table-td-p">' + t.numero + '</p></td><td>' + t.fecha + '</td><td>' + t.remitente + '</td><td>' + t.derivado +
+              '</td><td>' + t.asunto + '</td><td><span class="badge">' + t.estado + '</span></td><td>—</td><td><a href="' + SGD_BASE + '/tramites/detalletramite/' + t.id + '" target="_self" title="Ingresar al Tramite">Ingresar</a></td></tr>';
+          }).join('') + '</tbody></table></div></div>';
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

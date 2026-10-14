@@ -42,6 +42,9 @@ chrome.runtime.onInstalled.addListener(async (detalle) => {
 
 chrome.runtime.onStartup.addListener(actualizarReglasDeActivacion);
 
+// El ícono abre el panel lateral (solo está habilitado cuando hay sesión activa en el SGD).
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
 chrome.storage.onChanged.addListener((cambios, area) => {
   if (area === 'local' && cambios[LegalAlmacen.CLAVES.CONFIG]) actualizarReglasDeActivacion();
 });

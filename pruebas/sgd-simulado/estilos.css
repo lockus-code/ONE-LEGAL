@@ -1,19 +1,28 @@
-/* SGD simulado: imita la apariencia de un sistema documentario estatal (solo para pruebas). */
-body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 0; background: #eef1f4; color: #222; }
-.barra { background: #8c1d18; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 16px; }
-.barra a { color: #fff; }
-.menu { background: #f8e9e8; border-bottom: 1px solid #d9b9b7; padding: 6px 16px; font-size: 12px; }
-.menu a { color: #8c1d18; margin-right: 14px; }
-.contenido { padding: 16px; max-width: 1000px; }
+/* Imitación sencilla de la plantilla "Light Bootstrap Dashboard" del SGD (solo para pruebas). */
+body { margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; font-size: 13px; color: #333; background: #f4f3ef; }
+.wrapper { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: #1f77b4; color: #fff; flex: none; }
+.sidebar .logo { padding: 16px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,.3); }
+.usuario-sesion { padding: 12px 16px; font-size: 12px; opacity: .9; }
+.sidebar .nav { list-style: none; padding: 0; margin: 0; }
+.sidebar .nav a { display: block; color: #fff; padding: 9px 16px; text-decoration: none; }
+.sidebar .nav a:hover { background: rgba(255,255,255,.15); }
+.main-panel { flex: 1; min-width: 0; padding: 16px; }
+.container-fluid { width: 100%; }
+.row { display: flex; flex-wrap: wrap; margin: 0 -8px; }
+.row > [class*="col-"] { padding: 0 8px; box-sizing: border-box; }
+.col-md-12 { width: 100%; } .col-md-6 { width: 50%; } .col-sm-5 { width: 41.6%; } .col-sm-7 { width: 58.3%; }
+.card { background: #fff; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.12); margin-bottom: 16px; }
+.card .header { padding: 12px 15px 0; }
+legend.title { font-size: 14px; font-weight: bold; color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; width: 100%; margin: 0; }
+.card .content { padding: 12px 15px 15px; }
+.campo { margin-bottom: 8px; } .campo b { display: block; font-size: 11px; color: #888; }
+table.table { width: 100%; border-collapse: collapse; } .table th, .table td { border-bottom: 1px solid #eee; padding: 6px; text-align: left; vertical-align: top; }
+.table th { font-size: 11px; color: #888; text-transform: uppercase; }
+.badge { background: #1f77b4; color: #fff; border-radius: 10px; padding: 2px 8px; font-size: 11px; }
+.confidencial { background: #fdecea; color: #b42318; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-weight: bold; }
+.cargando { padding: 40px; text-align: center; color: #888; }
 .aviso { background: #fff6d5; border: 1px solid #ecd78f; padding: 8px; margin-bottom: 12px; }
-h2 { font-size: 15px; color: #8c1d18; margin: 0 0 10px; }
-table { background: #fff; border-collapse: collapse; width: 100%; }
-td, th { border: 1px solid #ccd; padding: 6px 8px; text-align: left; vertical-align: top; }
-th { background: #e3e7ee; font-size: 12px; }
-td.lbl { background: #f2f4f8; font-weight: bold; width: 210px; }
-tr:hover td { background: #fafbfd; }
-.login { max-width: 340px; margin: 70px auto; background: #fff; padding: 22px; border-top: 4px solid #8c1d18; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-.login label { display: block; margin: 10px 0 4px; font-weight: bold; }
-.login input { width: 100%; box-sizing: border-box; padding: 6px; }
-.login button, .boton { margin-top: 14px; background: #8c1d18; color: #fff; border: 0; padding: 8px 14px; cursor: pointer; }
-.error { color: #b00; margin-top: 8px; }
+.login { max-width: 340px; margin: 80px auto; background: #fff; padding: 22px; border-top: 4px solid #1f77b4; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.login label { display: block; margin: 10px 0 4px; font-weight: bold; } .login input { width: 100%; box-sizing: border-box; padding: 6px; }
+.btn { margin-top: 14px; background: #1f77b4; color: #fff; border: 0; padding: 8px 14px; cursor: pointer; }

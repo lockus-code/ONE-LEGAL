@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -27,7 +28,8 @@ func servidorDePrueba(t *testing.T) http.Handler {
 			{Codigo: codigo(anio, 6), Denominacion: "Conciliación concluida", Categoria: "Arbitraje y Controversias", Procedimiento: "Arbitraje de Derecho", Responsable: "R02", Estado: estadoFinalizado},
 		},
 	}
-	s := &Servidor{bd: bd, semilla: semilla, web: webEmbebido, base: "http://localhost:8790/", iniciado: time.Now()}
+	web, _ := fs.Sub(webEmbebido, "web")
+	s := &Servidor{bd: bd, semilla: semilla, web: web, base: "http://localhost:8790/", iniciado: time.Now()}
 	return s.Rutas()
 }
 
@@ -142,5 +144,38 @@ func TestPortalGuardaDocumento(t *testing.T) {
 	_, cat := llamar(t, h, "GET", "/api/catalogo", nil)
 	if n := len(cat["procesos"].([]any)); n != 1 {
 		t.Fatalf("el catálogo debía tomar los procesos del portal; hay %d", n)
+	}
+}
+
+func TestConsultaTramiteRegistrado(t *testing.T) {
+	h := servidorDePrueba(t)
+	tr := tramite("T7", "anexo", codigo(time.Now().Year(), 4))
+	tr["nroExpediente"] = "2026-01234-3"
+	if cod, _ := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tr}); cod != http.StatusCreated {
+		t.Fatalf("esperaba 201, obtuve %d", cod)
+	}
+	_, res := llamar(t, h, "GET", "/api/tramites-sgd?numero=2026-01234-3", nil)
+	if res["registrado"] != true || len(res["vinculaciones"].([]any)) != 1 {
+		t.Fatalf("el trámite debía figurar como registrado: %v", res)
+	}
+	_, res = llamar(t, h, "GET", "/api/tramites-sgd?numero=2026-09999-1", nil)
+	if res["registrado"] != false {
+		t.Fatalf("un trámite nuevo no debía figurar como registrado: %v", res)
+	}
+}
+
+func TestRutasDelSgdSimulado(t *testing.T) {
+	h := servidorDePrueba(t)
+	for ruta, contiene := range map[string]string{
+		"/sgd-simulado/pages/login":                    "id=\"ingreso\"",
+		"/sgd-simulado/tramites/mistramites":           "app-mistramites",
+		"/sgd-simulado/tramites/detalletramite/250101": "app-detalletramite",
+		"/sgd-simulado/estilos.css":                    "legend.title",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", ruta, nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), contiene) {
+			t.Errorf("%s: código %d, se esperaba que contuviera %q", ruta, rec.Code, contiene)
+		}
 	}
 }
