@@ -50,6 +50,18 @@
       <div id="modal-contenido"></div>
     </div>
   </div>
+  <div id="confirmacion" class="modal modal--confirmacion" hidden>
+    <div class="modal__fondo" data-cancelar></div>
+    <div class="modal__caja modal__caja--angosta" role="alertdialog" aria-modal="true" aria-describedby="confirmacion-texto">
+      <div class="modal__cuerpo modal__cuerpo--simple">
+        <p id="confirmacion-texto"></p>
+        <div class="modal__pie" style="padding:0">
+          <button type="button" class="btn" data-cancelar>Cancelar</button>
+          <button type="button" class="btn btn--primario" id="confirmacion-aceptar">Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
   <div id="notificacion" class="notificacion" role="status" hidden></div>
 

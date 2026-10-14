@@ -240,7 +240,7 @@
         <label>Estado<select id="f-estado"><option value="">Todos</option>${SEMILLA.ESTADOS_PROCESO.map((e) => `<option ${e === f.estado ? 'selected' : ''}>${e}</option>`).join('')}</select></label>
         ${esGerente() ? `<label>Responsable<select id="f-responsable"><option value="">Todos</option>${SEMILLA.responsables.map((r) => `<option value="${r.codigo}" ${r.codigo === f.responsable ? 'selected' : ''}>${esc(r.nombre)}</option>`).join('')}</select></label>` : ''}
         <span class="espacio"></span>
-        ${esGerente() ? '' : '<a class="btn btn--primario" href="#/plantillas">+ Generar proceso desde plantilla</a>'}
+        ${esGerente() ? '' : '<a class="btn btn--primario" href="#plantillas">+ Generar proceso desde plantilla</a>'}
       </div>
       <section class="tarjeta"><div class="tabla-envoltura"><table class="tabla">
         <thead><tr><th>Código</th><th>Denominación</th><th>Categoría / Procedimiento</th>${esGerente() ? '<th>Responsable</th>' : ''}<th>Estado</th><th class="num">Actividades</th><th style="width:140px">Avance</th><th class="num">Trámites SGD</th></tr></thead>
@@ -284,13 +284,13 @@
           ${kpi('Trámites SGD recibidos', tram30.length, 'Últimos 30 días')}
         </div>
         <div class="rejilla rejilla--3-1">
-          <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Mis prioridades</h2><p>Actividades abiertas ordenadas por fecha límite</p></div><a class="btn btn--sm" href="#/tablero">Ver tablero</a></div>
+          <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Mis prioridades</h2><p>Actividades abiertas ordenadas por fecha límite</p></div><a class="btn btn--sm" href="#tablero">Ver tablero</a></div>
             ${prioridades.length ? `<ul class="lista">${prioridades.map((a) => `<li>
               <div class="lista__cuerpo"><button class="enlace lista__titulo" data-actividad="${a.clave}">${esc(a.clave)} · ${esc(a.titulo)}</button>
               <div class="lista__meta">${esc(a.procesoCodigo)} · ${esc(a.fase)} · ${chipPrioridad(a.prioridad)}</div></div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">${chipEstado(a.estado)}${chipVence(a)}</div></li>`).join('')}</ul>` : '<p class="vacio">No tiene actividades abiertas.</p>'}
           </section>
-          <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Últimos trámites SGD indexados</h2><p>Documentos vinculados a sus procesos</p></div><a class="btn btn--sm" href="#/sgd">Ver todos</a></div>
+          <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Últimos trámites SGD indexados</h2><p>Documentos vinculados a sus procesos</p></div><a class="btn btn--sm" href="#sgd">Ver todos</a></div>
             ${tram.length ? `<ul class="lista">${tram.slice(0, 6).map((t) => `<li><div class="lista__cuerpo">
               <div class="lista__titulo">${esc(t.asunto)}</div>
               <div class="lista__meta"><span class="mono">${esc(t.nroExpediente || t.nroRegistro)}</span> · ${esc(t.vinculacion.procesoCodigo)} · ${fmtFecha(t.fechaCaptura)}</div>
@@ -348,7 +348,7 @@
         zona.addEventListener('drop', (e) => {
           e.preventDefault(); zona.classList.remove('sobre');
           const a = D.actividades.find((x) => x.clave === e.dataTransfer.getData('text/plain'));
-          if (a && cambiarEstadoActividad(a, zona.dataset.estado)) vistas.tablero.render(v);
+          if (a) cambiarEstadoActividad(a, zona.dataset.estado, () => vistas.tablero.render(v));
         });
       });
     }
@@ -375,18 +375,42 @@
     </div>`;
   }
 
-  /** Regla: las actividades de un proceso finalizado no se modifican. */
-  function cambiarEstadoActividad(a, estado) {
-    if (a.estado === estado) return false;
+  /**
+   * Regla: las actividades de un proceso finalizado no se modifican. Concluir con
+   * ítems pendientes en la lista de verificación requiere confirmación.
+   * `despues` se ejecuta cuando el cambio se aplica.
+   */
+  function cambiarEstadoActividad(a, estado, despues) {
+    if (a.estado === estado) return;
     const p = proceso(a.procesoCodigo);
-    if (p && p.estado === 'Finalizado') { notificar('El proceso está finalizado: sus actividades son de solo consulta.'); return false; }
+    if (p && p.estado === 'Finalizado') { notificar('El proceso está finalizado: sus actividades son de solo consulta.'); return; }
+    const aplicar = () => {
+      a.comentarios.push({ autor: actor(), fecha: isoDia(new Date()), texto: `Cambió el estado de «${a.estado}» a «${estado}».`, sistema: true });
+      a.estado = estado;
+      if (p && p.estado === 'Registrado' && estado !== 'Pendiente') p.estado = 'En trámite';
+      guardar();
+      if (despues) despues();
+    };
     const pendientes = a.checklist.filter((i) => !i.hecho).length;
-    if (estado === 'Concluida' && pendientes && !confirm(`La lista de verificación tiene ${pendientes} ítem(s) pendiente(s). ¿Concluir la actividad de todos modos?`)) return false;
-    a.comentarios.push({ autor: actor(), fecha: isoDia(new Date()), texto: `Cambió el estado de «${a.estado}» a «${estado}».`, sistema: true });
-    a.estado = estado;
-    if (p && p.estado === 'Registrado' && estado !== 'Pendiente') p.estado = 'En trámite';
-    guardar();
-    return true;
+    if (estado === 'Concluida' && pendientes) {
+      confirmar(`La lista de verificación de ${a.clave} tiene ${pendientes} ítem(s) pendiente(s). ¿Desea concluir la actividad de todos modos?`, 'Concluir actividad', aplicar);
+      return;
+    }
+    aplicar();
+  }
+
+  /** Confirmación dentro de la página (los diálogos nativos no están disponibles en todos los entornos). */
+  function confirmar(texto, textoAceptar, alAceptar) {
+    const caja = $('#confirmacion');
+    $('#confirmacion-texto').textContent = texto;
+    const aceptar = $('#confirmacion-aceptar');
+    aceptar.textContent = textoAceptar;
+    const previo = document.activeElement;
+    const cerrar = () => { caja.hidden = true; aceptar.onclick = null; if (previo && document.body.contains(previo)) previo.focus(); };
+    aceptar.onclick = () => { cerrar(); alAceptar(); };
+    $$('[data-cancelar]', caja).forEach((b) => { b.onclick = cerrar; });
+    caja.hidden = false;
+    aceptar.focus();
   }
 
   const actor = () => esGerente() ? SEMILLA.gerente.nombre : responsable(perfil.responsable).nombre;
@@ -507,11 +531,29 @@
       responsables: SEMILLA.responsables.map(({ codigo, nombre, cargo }) => ({ codigo, nombre, cargo })),
       procesos: D.procesos.map(({ codigo, denominacion, categoria, procedimiento, responsable: r, estado, fechaInicio }) => ({ codigo, denominacion, categoria, procedimiento, responsable: r, estado, fechaInicio }))
     };
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(catalogo, null, 2)], { type: 'application/json' }));
-    a.download = `legal-catalogo-procesos-${isoDia(HOY)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const json = JSON.stringify(catalogo, null, 2);
+    const nombre = `legal-catalogo-procesos-${isoDia(HOY)}.json`;
+    abrirModal(`
+      <div class="modal__cab"><div><div class="modal__clave">${catalogo.procesos.length} procesos · ${catalogo.responsables.length} responsables</div><h2 id="modal-titulo">Catálogo para el Conector SGD</h2></div><button class="btn-icono" data-cerrar aria-label="Cerrar">✕</button></div>
+      <div class="modal__cuerpo modal__cuerpo--simple formulario">
+        <p class="secundario">Importe este catálogo en la Configuración de la extensión (paso 4, «Importar catálogo»). Si la descarga no está disponible en su navegador, copie el contenido y guárdelo como <span class="mono">${nombre}</span>.</p>
+        <textarea id="catalogo-json" class="mono" rows="12" readonly>${esc(json)}</textarea>
+        <div class="modal__pie" style="padding:0">
+          <button type="button" class="btn" id="catalogo-copiar">Copiar contenido</button>
+          <button type="button" class="btn btn--primario" id="catalogo-descargar">Descargar archivo</button>
+        </div>
+      </div>`, true);
+    $('#catalogo-copiar').addEventListener('click', () => {
+      navigator.clipboard.writeText(json).then(() => notificar('Catálogo copiado al portapapeles.'))
+        .catch(() => { const t = $('#catalogo-json'); t.focus(); t.select(); notificar('Seleccione y copie el contenido con Ctrl+C.'); });
+    });
+    $('#catalogo-descargar').addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = nombre;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
   }
 
   // ================================================================= modales
@@ -590,7 +632,11 @@
     $('#m-descripcion', caja).addEventListener('change', (e) => { a.descripcion = e.target.value; persistir(); });
     $('#m-prioridad', caja).addEventListener('change', (e) => { a.prioridad = e.target.value; reabrir(); });
     $('#m-limite', caja).addEventListener('change', (e) => { if (e.target.value) { a.fechaLimite = e.target.value; reabrir(); } });
-    $('#m-estado', caja).addEventListener('change', (e) => { if (cambiarEstadoActividad(a, e.target.value)) renderizar(); modalActividad(clave); });
+    $('#m-estado', caja).addEventListener('change', (e) => {
+      const elegido = e.target.value;
+      e.target.value = a.estado;
+      cambiarEstadoActividad(a, elegido, () => { renderizar(); modalActividad(clave); });
+    });
     $$('[data-check]', caja).forEach((c) => c.addEventListener('change', () => { a.checklist[+c.dataset.check].hecho = c.checked; reabrir(); }));
     $$('[data-quitar-check]', caja).forEach((b) => b.addEventListener('click', () => { a.checklist.splice(+b.dataset.quitarCheck, 1); reabrir(); }));
     const ag = $('#m-agregar', caja);
@@ -715,7 +761,7 @@
       instanciarPlantilla(p, t);
       guardar(); cerrarModal();
       vistas.tablero.f = { proceso: codigo, prioridad: '', texto: '', soloVencidas: false };
-      location.hash = '#/tablero';
+      location.hash = '#tablero';
       notificar(`Proceso ${codigo} generado con ${actividadesDe(codigo).length} actividades.`);
     });
   }
@@ -747,11 +793,11 @@
 
   function renderizar() {
     const ruta = rutaActual();
-    if (location.hash !== `#/${ruta}`) history.replaceState(null, '', `#/${ruta}`);
+    if (location.hash !== `#${ruta}`) history.replaceState(null, '', `#${ruta}`);
     const vista = vistas[ruta];
     $('#menu').innerHTML = MENU[perfil.rol].map((m) => m.grupo
       ? `<div class="menu__grupo">${m.grupo}</div>`
-      : `<a href="#/${m.ruta}" ${m.ruta === ruta ? 'aria-current="page"' : ''}><span>${m.texto}</span>${m.cuenta ? `<span class="cuenta">${m.cuenta()}</span>` : ''}</a>`).join('');
+      : `<a href="#${m.ruta}" ${m.ruta === ruta ? 'aria-current="page"' : ''}><span>${m.texto}</span>${m.cuenta ? `<span class="cuenta">${m.cuenta()}</span>` : ''}</a>`).join('');
     $('#titulo-vista').textContent = vista.titulo;
     $('#subtitulo-vista').textContent = vista.subtitulo;
     document.title = `${vista.titulo} · LEGAL`;
@@ -770,7 +816,7 @@
       perfil = sel.value === 'gerente' ? { rol: 'gerente', responsable: perfil.responsable } : { rol: 'responsable', responsable: sel.value.slice(2) };
       almacen.escribir(CLAVE_PERFIL, perfil);
       vistaProcesos.f = null; vistas.tablero.f = null; vistas.sgd.f = null;
-      location.hash = `#/${MENU[perfil.rol][1].ruta}`;
+      location.hash = `#${MENU[perfil.rol][1].ruta}`;
       renderizar();
     });
   }
@@ -786,6 +832,7 @@
     if (cp) { navigator.clipboard.writeText(cp.dataset.copiar).then(() => notificar('Ruta del SGD copiada al portapapeles.')).catch(() => notificar(cp.dataset.copiar)); }
   });
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#confirmacion').hidden) { $('#confirmacion [data-cancelar]').click(); return; }
     if (e.key === 'Escape' && !$('#modal').hidden) cerrarModal();
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-actividad]')) { e.preventDefault(); modalActividad(e.target.dataset.actividad); }
   });
@@ -803,8 +850,9 @@
   document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-tip]'); if (el) { const r = el.getBoundingClientRect(); mostrarTip(el, r.left + r.width / 2, r.top); } else tip.hidden = true; });
 
   $('#btn-restablecer').addEventListener('click', () => {
-    if (!confirm('¿Restablecer los datos de ejemplo? Se perderán los cambios realizados en este navegador.')) return;
-    D = copiaSemilla(); guardar(); renderizar(); notificar('Datos de ejemplo restablecidos.');
+    confirmar('¿Restablecer los datos de ejemplo? Se perderán los cambios realizados en este navegador.', 'Restablecer datos', () => {
+      D = copiaSemilla(); guardar(); renderizar(); notificar('Datos de ejemplo restablecidos.');
+    });
   });
   $('#btn-menu').addEventListener('click', () => {
     const abierto = $('#lateral').classList.toggle('abierto');
