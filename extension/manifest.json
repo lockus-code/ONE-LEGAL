@@ -2,10 +2,11 @@
   "manifest_version": 3,
   "name": "LEGAL · Conector SGD",
   "short_name": "LEGAL SGD",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lector institucional de trámites del Sistema de Gestión Documental (SGD) para su vinculación a procesos legales en LEGAL. Solo lectura.",
   "minimum_chrome_version": "110",
   "permissions": ["storage", "activeTab", "scripting", "declarativeContent"],
+  "host_permissions": ["http://localhost:8790/*", "http://127.0.0.1:8790/*"],
   "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js" },
   "action": {

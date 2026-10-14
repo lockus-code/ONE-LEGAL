@@ -20,6 +20,7 @@
     form.plantillaEnlace.value = c.plantillaEnlace;
     form.parametrosSensibles.value = c.parametrosSensibles.join(', ');
     form.usuarioLegal.value = c.usuarioLegal;
+    form.servidorLegal.value = c.servidorLegal;
     await resumen();
   }
 
@@ -67,7 +68,8 @@
       textosSesion: lineas(form.textosSesion.value),
       plantillaEnlace: form.plantillaEnlace.value.trim(),
       parametrosSensibles: form.parametrosSensibles.value.split(',').map((s) => s.trim()).filter(Boolean),
-      usuarioLegal: form.usuarioLegal.value.trim()
+      usuarioLegal: form.usuarioLegal.value.trim(),
+      servidorLegal: form.servidorLegal.value.trim().replace(/\/+$/, '')
     });
     mensaje(concedido ? 'exito' : 'alerta', concedido
       ? 'Configuración guardada. Recargue la pestaña del SGD para aplicar la habilitación del conector.'
@@ -109,6 +111,19 @@
     await new Promise((r) => chrome.storage.local.remove([A.CLAVES.TRAMITES, A.CLAVES.PROCESOS_NUEVOS], r));
     mensaje('info', 'Registros locales eliminados.');
     resumen();
+  });
+
+  $('btn-probar-servidor').addEventListener('click', async () => {
+    const config = { servidorLegal: form.servidorLegal.value.trim() };
+    const salida = $('estado-servidor');
+    if (!config.servidorLegal) { salida.textContent = 'Indique la dirección del servidor.'; return; }
+    salida.textContent = 'Probando…';
+    try {
+      const e = await LegalServidor.estado(config);
+      salida.textContent = `Conectado: ${e.nombre} · ${e.bd.tramites} trámite(s) en la base de datos.`;
+    } catch (err) {
+      salida.textContent = `Sin conexión: ${err.message}`;
+    }
   });
 
   cargar();

@@ -1,0 +1,19 @@
+/* SGD simulado: imita la apariencia de un sistema documentario estatal (solo para pruebas). */
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 0; background: #eef1f4; color: #222; }
+.barra { background: #8c1d18; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 16px; }
+.barra a { color: #fff; }
+.menu { background: #f8e9e8; border-bottom: 1px solid #d9b9b7; padding: 6px 16px; font-size: 12px; }
+.menu a { color: #8c1d18; margin-right: 14px; }
+.contenido { padding: 16px; max-width: 1000px; }
+.aviso { background: #fff6d5; border: 1px solid #ecd78f; padding: 8px; margin-bottom: 12px; }
+h2 { font-size: 15px; color: #8c1d18; margin: 0 0 10px; }
+table { background: #fff; border-collapse: collapse; width: 100%; }
+td, th { border: 1px solid #ccd; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #e3e7ee; font-size: 12px; }
+td.lbl { background: #f2f4f8; font-weight: bold; width: 210px; }
+tr:hover td { background: #fafbfd; }
+.login { max-width: 340px; margin: 70px auto; background: #fff; padding: 22px; border-top: 4px solid #8c1d18; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.login label { display: block; margin: 10px 0 4px; font-weight: bold; }
+.login input { width: 100%; box-sizing: border-box; padding: 6px; }
+.login button, .boton { margin-top: 14px; background: #8c1d18; color: #fff; border: 0; padding: 8px 14px; cursor: pointer; }
+.error { color: #b00; margin-top: 8px; }

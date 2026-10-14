@@ -22,8 +22,26 @@
   }));
   let D = almacen.leer(CLAVE_DATOS);
   if (!D || D.version !== SEMILLA.version) D = copiaSemilla();
-  const guardar = () => almacen.escribir(CLAVE_DATOS, D);
-  guardar();
+
+  // Modo servidor: cuando el portal lo sirve el entorno de prueba LEGAL, los datos
+  // se leen y guardan en su base de datos y se sincronizan las capturas del Conector.
+  let servidor = null;
+  let subidaPendiente = null;
+  function guardar() {
+    almacen.escribir(CLAVE_DATOS, D);
+    if (!servidor) return;
+    clearTimeout(subidaPendiente);
+    subidaPendiente = setTimeout(subirAlServidor, 400);
+  }
+  async function subirAlServidor() {
+    try {
+      const r = await fetch('/api/portal', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(D) });
+      if (!r.ok) throw new Error(r.status);
+      pintarEstadoBd(true);
+    } catch (e) {
+      pintarEstadoBd(false);
+    }
+  }
 
   let perfil = almacen.leer(CLAVE_PERFIL) || { rol: 'gerente', responsable: 'R01' };
 
@@ -36,7 +54,8 @@
   const aFecha = (iso) => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
   const isoDia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const sumarDias = (iso, n) => { const d = aFecha(iso); d.setDate(d.getDate() + n); return isoDia(d); };
-  const fmtFecha = (iso) => iso ? aFecha(iso).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  // Las fechas que vienen del SGD pueden estar en formato dd/mm/aaaa: se muestran tal cual.
+  const fmtFecha = (iso) => !iso ? '—' : /^\d{4}-\d{2}-\d{2}/.test(iso) ? aFecha(iso).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : String(iso);
   const fmtFechaHora = (iso) => new Date(iso).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const diasHasta = (iso) => Math.round((aFecha(iso) - HOY) / 86400000);
   const pct = (n) => `${Math.round(n * 100)} %`;
@@ -490,17 +509,16 @@
   };
 
   // ============================================================ intercambio
-  async function importarConector(ev) {
-    const archivo = ev.target.files[0];
-    ev.target.value = '';
-    if (!archivo) return;
-    let paquete;
-    try { paquete = JSON.parse(await archivo.text()); } catch (e) { notificar('El archivo no es un JSON válido.'); return; }
-    if (paquete.formato !== 'legal-sgd-intercambio') { notificar('El archivo no corresponde a una exportación del Conector SGD.'); return; }
-
-    const remapeo = {};
+  /**
+   * Incorpora procesos y trámites capturados por el Conector SGD (archivo JSON o
+   * base de datos del servidor). Es idempotente: lo ya incorporado se omite.
+   */
+  function incorporarPaquete(paquete) {
+    const remapeo = D.remapeoConector || (D.remapeoConector = {});
+    const omitidos = D.tramitesOmitidos || (D.tramitesOmitidos = []);
     let procesosNuevos = 0, tramitesNuevos = 0, rechazados = 0;
     (paquete.procesosRegistrados || []).forEach((pr) => {
+      if (remapeo[pr.codigo]) return;
       const existente = proceso(pr.codigo);
       if (existente && existente.denominacion === pr.denominacion) return;
       const codigo = existente ? siguienteCodigoProceso() : pr.codigo;
@@ -512,17 +530,55 @@
       procesosNuevos++;
     });
     (paquete.tramitesIndexados || []).forEach((t) => {
-      if (D.tramites.some((x) => x.id === t.id)) return;
+      if (D.tramites.some((x) => x.id === t.id) || omitidos.includes(t.id)) return;
       const codigo = remapeo[t.vinculacion.procesoCodigo] || t.vinculacion.procesoCodigo;
       const p = proceso(codigo);
-      if (!p || (p.estado === 'Finalizado' && t.vinculacion.modo === 'anexo')) { rechazados++; return; }
+      if (!p || (p.estado === 'Finalizado' && t.vinculacion.modo === 'anexo')) { omitidos.push(t.id); rechazados++; return; }
       const act = actividadesDe(codigo).find(abierta);
       D.tramites.push({ ...t, vinculacion: { ...t.vinculacion, procesoCodigo: codigo, actividadClave: act ? act.clave : null } });
       tramitesNuevos++;
     });
-    guardar();
+    if (procesosNuevos || tramitesNuevos || rechazados) guardar();
+    return { procesosNuevos, tramitesNuevos, rechazados };
+  }
+
+  const resumenIncorporacion = (r) => `${r.tramitesNuevos} trámite(s) y ${r.procesosNuevos} proceso(s) nuevos${r.rechazados ? `; ${r.rechazados} omitido(s) por proceso inexistente o finalizado` : ''}`;
+
+  async function importarConector(ev) {
+    const archivo = ev.target.files[0];
+    ev.target.value = '';
+    if (!archivo) return;
+    let paquete;
+    try { paquete = JSON.parse(await archivo.text()); } catch (e) { notificar('El archivo no es un JSON válido.'); return; }
+    if (paquete.formato !== 'legal-sgd-intercambio') { notificar('El archivo no corresponde a una exportación del Conector SGD.'); return; }
+    const r = incorporarPaquete(paquete);
     renderizar();
-    notificar(`Importación completada: ${tramitesNuevos} trámite(s) y ${procesosNuevos} proceso(s) nuevos${rechazados ? `; ${rechazados} omitido(s) por proceso inexistente o finalizado` : ''}.`);
+    notificar(`Importación completada: ${resumenIncorporacion(r)}.`);
+  }
+
+  /** Trae de la base de datos del servidor las vinculaciones registradas por el Conector. */
+  async function sincronizarConector() {
+    try {
+      const r = await fetch('/api/vinculaciones', { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const res = incorporarPaquete(await r.json());
+      pintarEstadoBd(true);
+      if (res.procesosNuevos || res.tramitesNuevos) {
+        renderizar();
+        notificar(`Conector SGD: se incorporaron ${resumenIncorporacion(res)}.`);
+      }
+    } catch (e) {
+      pintarEstadoBd(false);
+    }
+  }
+
+  function pintarEstadoBd(ok) {
+    const el = $('#estado-bd');
+    if (!el) return;
+    if (!servidor) { el.textContent = 'Datos guardados en este navegador'; return; }
+    const hora = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.textContent = ok ? `● BD de prueba conectada · ${hora}` : '○ BD de prueba sin conexión';
+    el.title = ok ? `${servidor.nombre} · ${servidor.bd.ruta}` : 'Verifique que LEGAL-Prueba esté en ejecución';
   }
 
   function exportarCatalogo() {
@@ -850,8 +906,11 @@
   document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-tip]'); if (el) { const r = el.getBoundingClientRect(); mostrarTip(el, r.left + r.width / 2, r.top); } else tip.hidden = true; });
 
   $('#btn-restablecer').addEventListener('click', () => {
-    confirmar('¿Restablecer los datos de ejemplo? Se perderán los cambios realizados en este navegador.', 'Restablecer datos', () => {
+    confirmar(servidor
+      ? '¿Restablecer los datos de ejemplo del portal? Se perderán los cambios hechos en el portal. Las capturas del Conector guardadas en la base de datos se volverán a incorporar.'
+      : '¿Restablecer los datos de ejemplo? Se perderán los cambios realizados en este navegador.', 'Restablecer datos', () => {
       D = copiaSemilla(); guardar(); renderizar(); notificar('Datos de ejemplo restablecidos.');
+      if (servidor) sincronizarConector();
     });
   });
   $('#btn-menu').addEventListener('click', () => {
@@ -861,6 +920,28 @@
   $('#menu').addEventListener('click', (e) => { if (e.target.closest('a')) $('#lateral').classList.remove('abierto'); });
   window.addEventListener('hashchange', renderizar);
 
-  iniciarPerfil();
-  renderizar();
+  async function arrancar() {
+    if (/^https?:$/.test(location.protocol)) {
+      try {
+        const r = await fetch('/api/estado', { cache: 'no-store' });
+        const e = r.ok ? await r.json() : null;
+        if (e && e.servicio === 'legal-prueba') servidor = e;
+      } catch (err) { /* sin servidor: modo navegador */ }
+    }
+    if (servidor) {
+      try {
+        const r = await fetch('/api/portal', { cache: 'no-store' });
+        const doc = r.ok ? await r.json() : null;
+        if (doc && doc.version === SEMILLA.version) D = doc; else { D = copiaSemilla(); await subirAlServidor(); }
+      } catch (err) { /* se mantiene la copia local */ }
+      await sincronizarConector();
+      setInterval(sincronizarConector, 8000);
+    }
+    almacen.escribir(CLAVE_DATOS, D);
+    iniciarPerfil();
+    renderizar();
+    pintarEstadoBd(true);
+  }
+
+  arrancar();
 })();

@@ -117,3 +117,8 @@ input.leido { background: #f3f8f3; border-color: #b9d9c3; }
 .ix__vinc { font-size: 12px; color: var(--tinta-2); }
 .ix__acciones { display: flex; gap: 12px; margin-top: 6px; font-size: 12px; }
 .ix__acciones a { color: var(--azul-2); font-weight: 600; }
+
+.conexion { padding: 6px 14px; font-size: 11px; border-bottom: 1px solid var(--borde); }
+.conexion--ok { background: var(--exito-fondo); color: var(--exito); }
+.conexion--error { background: var(--alerta-fondo); color: var(--alerta); }
+.btn:disabled { opacity: .6; cursor: wait; }

@@ -13,7 +13,7 @@
     TRAMITES: 'legal.tramitesIndexados'
   };
 
-  const CONFIG_PREDETERMINADA = {
+  const CONFIG_PREDETERMINADA = Object.assign({
     // Prefijos de URL del SGD. Ejemplo: "https://sgd.institucion.gob.pe/"
     urlsSgd: [],
     // 'indicador': el ícono se habilita solo si la página del SGD muestra un
@@ -42,8 +42,10 @@
     // Parámetros de URL que se eliminan del enlace directo (identificadores de sesión).
     parametrosSensibles: ['jsessionid', 'token', 'sid', 'sessionid', 'phpsessid', 'aspsessionid', 'csrf', '_csrf'],
     // Usuario de LEGAL que realiza la captura (solo para trazabilidad local).
-    usuarioLegal: ''
-  };
+    usuarioLegal: '',
+    // Servidor LEGAL (opcional). Ej.: "http://localhost:8790" en el entorno de prueba.
+    servidorLegal: ''
+  }, global.LEGAL_ENTORNO || {});
 
   function obtener(clave, porDefecto) {
     return new Promise((resolve) => {

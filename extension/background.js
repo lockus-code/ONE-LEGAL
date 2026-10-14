@@ -7,7 +7,7 @@
  * desde aquí) cuando la URL corresponde al SGD y se observa un indicador de
  * sesión. Al abrir la extensión, la sesión se verifica nuevamente.
  */
-importScripts('shared/catalogo.js', 'shared/almacen.js');
+importScripts('shared/entorno.js', 'shared/catalogo.js', 'shared/almacen.js');
 
 async function actualizarReglasDeActivacion() {
   const config = await LegalAlmacen.obtenerConfiguracion();
@@ -36,7 +36,8 @@ async function actualizarReglasDeActivacion() {
 chrome.runtime.onInstalled.addListener(async (detalle) => {
   await actualizarReglasDeActivacion();
   const config = await LegalAlmacen.obtenerConfiguracion();
-  if (detalle.reason === 'install' || config.urlsSgd.length === 0) chrome.runtime.openOptionsPage();
+  // Sin SGD configurado, se abre Configuración (el entorno de prueba ya viene preconfigurado).
+  if (config.urlsSgd.length === 0) chrome.runtime.openOptionsPage();
 });
 
 chrome.runtime.onStartup.addListener(actualizarReglasDeActivacion);

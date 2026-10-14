@@ -14,6 +14,7 @@
     </div>
     <span class="insignia" title="La extensión solo lee información de la página. No ejecuta acciones en el SGD.">Solo lectura</span>
   </header>
+  <div id="conexion" class="conexion oculto" role="status"></div>
 
   <!-- Estado de la sesión SGD -->
   <section id="estado" class="estado estado--verificando" aria-live="polite">
@@ -113,9 +114,11 @@
     </section>
   </main>
 
+  <script src="../shared/entorno.js"></script>
   <script src="../shared/catalogo.js"></script>
   <script src="../shared/almacen.js"></script>
   <script src="../shared/lector.js"></script>
+  <script src="../shared/servidor.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>SGD - Bandeja de documentos recibidos</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <div id="cabecera"></div>
+  <div class="contenido">
+    <h2>Bandeja de documentos recibidos</h2>
+    <table>
+      <thead><tr><th>N° Expediente</th><th>Tipo</th><th>Documento</th><th>Asunto</th><th>Remitente</th><th>Fecha</th><th>Estado</th></tr></thead>
+      <tbody id="filas"></tbody>
+    </table>
+  </div>
+  <script src="datos.js"></script>
+  <script>
+    var sesion = SGD_SESION.exigir();
+    if (sesion) {
+      document.getElementById('cabecera').innerHTML = SGD_CABECERA(sesion);
+      document.getElementById('filas').innerHTML = SGD_DOCUMENTOS.map(function (d) {
+        return '<tr><td><a href="detalle.html?id=' + d.id + '">' + d.expediente + '</a></td><td>' + d.tipo + '</td><td>' + d.numero +
+          '</td><td>' + d.asunto + '</td><td>' + d.remitente + '</td><td>' + d.fecha + '</td><td>' + d.estado + '</td></tr>';
+      }).join('');
+    }
+  </script>
+</body>
+</html>

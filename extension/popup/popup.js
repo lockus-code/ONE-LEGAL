@@ -12,7 +12,8 @@
   const CAMPOS_TRAMITE = ['nroExpediente', 'nroRegistro', 'tipoDocumento', 'nroDocumento', 'asunto', 'remitente', 'dependencia', 'fechaDocumento', 'estadoSgd'];
   const ESTADO_FINALIZADO = window.LEGAL_CATALOGO.ESTADOS_PROCESO.FINALIZADO;
 
-  const estado = { config: null, catalogo: null, tab: null, lectura: null, urlDepurada: '' };
+  const estado = { config: null, catalogo: null, tab: null, lectura: null, urlDepurada: '', servidor: null };
+  const S = window.LegalServidor;
 
   // ---------------------------------------------------------------- utilidades
   const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -274,9 +275,7 @@
       return;
     }
 
-    if (modoActual() === 'nuevo') await A.registrarProceso(proceso);
-
-    const tramite = {
+    let tramite = {
       id: `TSGD-${Date.now().toString(36).toUpperCase()}`,
       ...datosTramite,
       enlaceSgd: campo('enlaceSgd').value.trim(),
@@ -294,17 +293,62 @@
       usuarioLegal: estado.config.usuarioLegal || null,
       fechaCaptura: new Date().toISOString()
     };
+    if (estado.servidor && estado.servidor.conectado) {
+      const boton = $('#btn-registrar');
+      boton.disabled = true;
+      try {
+        const r = await S.registrarVinculacion(estado.config, { tramite, procesoNuevo: modoActual() === 'nuevo' ? proceso : null });
+        tramite = r.tramite;
+        proceso = r.proceso;
+      } catch (e) {
+        mostrarMensaje('error', `El servidor LEGAL no registró la vinculación: ${e.name === 'AbortError' ? 'no respondió a tiempo' : e.message}`);
+        return;
+      } finally {
+        boton.disabled = false;
+      }
+    } else if (modoActual() === 'nuevo') {
+      await A.registrarProceso(proceso);
+    }
     await A.registrarTramite(tramite);
 
     delete form.dataset.confirmarDuplicado;
-    estado.catalogo = await A.obtenerCatalogo();
+    await cargarCatalogo();
     campo('asuntoVinculacion').value = '';
     campo('denominacion').value = '';
     cambiarModo();
     await pintarIndexados();
     mostrarMensaje('exito', tramite.vinculacion.modo === 'nuevo'
-      ? `Se generó el proceso ${proceso.codigo} y se indexó el trámite.`
-      : `Trámite indexado en el proceso ${proceso.codigo}.`);
+      ? `Se generó el proceso ${proceso.codigo} y se indexó el trámite${estado.servidor && estado.servidor.conectado ? ' en la base de datos LEGAL' : ''}.`
+      : `Trámite indexado en el proceso ${proceso.codigo}${estado.servidor && estado.servidor.conectado ? ' (registrado en la base de datos LEGAL)' : ''}.`);
+  }
+
+  // --------------------------------------------------------- servidor LEGAL
+  /** Catálogo desde el servidor LEGAL si está configurado y responde; si no, el local. */
+  async function cargarCatalogo() {
+    if (S.configurado(estado.config)) {
+      try {
+        const c = await S.catalogo(estado.config);
+        estado.servidor = { conectado: true, nombre: c.servidor || 'Servidor LEGAL' };
+        estado.catalogo = { categorias: c.categorias, responsables: c.responsables, procesos: c.procesos, origen: 'servidor' };
+        pintarConexion();
+        return;
+      } catch (e) {
+        estado.servidor = { conectado: false, error: e.name === 'AbortError' ? 'el servidor no respondió' : e.message };
+      }
+    }
+    estado.catalogo = await A.obtenerCatalogo();
+    pintarConexion();
+  }
+
+  function pintarConexion() {
+    const caja = $('#conexion');
+    const s = estado.servidor;
+    if (!s) { caja.classList.add('oculto'); return; }
+    caja.classList.remove('oculto');
+    caja.className = `conexion conexion--${s.conectado ? 'ok' : 'error'}`;
+    caja.textContent = s.conectado
+      ? `Conectado a ${s.nombre}: las vinculaciones se registran en su base de datos.`
+      : `Servidor LEGAL sin conexión (${s.error}). Modo local: los registros quedan en este navegador.`;
   }
 
   // ------------------------------------------------------ trámites indexados
@@ -375,7 +419,7 @@
   async function iniciar() {
     enlazarEventos();
     if (!(await verificarSesion())) return;
-    estado.catalogo = await A.obtenerCatalogo();
+    await cargarCatalogo();
     $('#principal').classList.remove('oculto');
     volcarLectura();
     cambiarModo();

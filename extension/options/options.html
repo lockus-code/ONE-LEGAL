@@ -59,6 +59,11 @@
         <label>Usuario LEGAL (trazabilidad de la captura)
           <input name="usuarioLegal" placeholder="Ej.: mquispe">
         </label>
+        <label>Servidor LEGAL (opcional)
+          <input name="servidorLegal" placeholder="http://localhost:8790" spellcheck="false">
+        </label>
+        <p class="ayuda">Si se indica, el catálogo de procesos se obtiene del servidor y cada vinculación se registra en su base de datos. Sin servidor, los registros quedan en este navegador y se exportan en JSON.</p>
+        <div class="acciones-linea"><button type="button" class="btn btn--secundario" id="btn-probar-servidor">Probar conexión</button><span class="ayuda" id="estado-servidor" style="margin:0"></span></div>
         <p class="ayuda" id="origen-catalogo"></p>
         <div class="acciones-linea">
           <label class="btn btn--secundario archivo">Importar catálogo (JSON)<input type="file" id="archivo-catalogo" accept="application/json"></label>
@@ -80,8 +85,10 @@
     </form>
   </main>
 
+  <script src="../shared/entorno.js"></script>
   <script src="../shared/catalogo.js"></script>
   <script src="../shared/almacen.js"></script>
+  <script src="../shared/servidor.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

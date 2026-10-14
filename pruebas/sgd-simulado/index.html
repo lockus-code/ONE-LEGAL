@@ -2,57 +2,29 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>SGD - Detalle de Expediente</title>
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; background: #eef1f4; }
-    .barra { background: #8c1d18; color: #fff; display: flex; justify-content: space-between; padding: 8px 16px; }
-    .barra a { color: #fff; }
-    .contenido { padding: 16px; }
-    table.detalle { background: #fff; border-collapse: collapse; width: 100%; max-width: 900px; }
-    table.detalle td { border: 1px solid #ccd; padding: 6px 8px; }
-    table.detalle td.lbl { background: #f2f4f8; font-weight: bold; width: 200px; }
-    .login { max-width: 320px; margin: 60px auto; background: #fff; padding: 20px; }
-    .aviso { background: #fff6d5; padding: 8px; margin-bottom: 12px; max-width: 884px; }
-  </style>
+  <title>SGD - Inicio de sesión</title>
+  <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
-  <!--
-    Página de pruebas que imita una vista de "Detalle de expediente" de un SGD.
-    Agregue ?sesion=0 a la URL para simular la pantalla de inicio de sesión.
-  -->
-  <div id="con-sesion">
-    <div class="barra">
-      <span>Sistema de Gestión Documental · Bandeja de Documentos Recibidos</span>
-      <span>Usuario: <span class="usuario-nombre">QUISPE ROJAS, MARÍA FERNANDA</span> · <a href="logout.do">Cerrar sesión</a></span>
-    </div>
-    <div class="contenido">
-      <div class="aviso">Vista simulada para pruebas del Conector SGD. No corresponde a un sistema real.</div>
-      <table class="detalle">
-        <tr><td class="lbl">N° Expediente:</td><td>2026-0048213</td></tr>
-        <tr><td class="lbl">Nro. Registro</td><td>000154872</td></tr>
-        <tr><td class="lbl">Tipo de Documento</td><td>CARTA</td></tr>
-        <tr><td class="lbl">N° Documento</td><td>CARTA N° 117-2026-CONSORCIO VIAL SUR</td></tr>
-        <tr><td class="lbl">Asunto</td><td>Solicita ampliación de plazo N° 03 y reconocimiento de mayores gastos generales – Contrato de obra N° 012-2025</td></tr>
-        <tr><td class="lbl">Remitente</td><td>CONSORCIO VIAL SUR</td></tr>
-        <tr><td class="lbl">Dependencia</td><td>Mesa de Partes Central</td></tr>
-        <tr><td class="lbl">Fecha de Documento</td><td>10/10/2026</td></tr>
-        <tr><td class="lbl">Estado</td><td>RECIBIDO</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <form id="sin-sesion" class="login" style="display:none">
-    <h3>Sistema de Gestión Documental</h3>
-    <p><label>Usuario <input name="usuario"></label></p>
-    <p><label>Contraseña <input type="password" name="clave"></label></p>
-    <button type="button">Ingresar</button>
+  <!-- SGD simulado para pruebas del Conector SGD. Acepta cualquier usuario y contraseña. -->
+  <form class="login" id="ingreso">
+    <h2>Sistema de Gestión Documental</h2>
+    <div class="aviso">Entorno simulado de pruebas. Ingrese cualquier usuario y contraseña.</div>
+    <label for="usuario">Usuario</label><input id="usuario" name="usuario" autocomplete="username" value="mquispe">
+    <label for="clave">Contraseña</label><input id="clave" name="clave" type="password" autocomplete="current-password">
+    <button type="submit">Ingresar</button>
+    <div class="error" id="error"></div>
   </form>
-
+  <script src="datos.js"></script>
   <script>
-    if (new URLSearchParams(location.search).get('sesion') === '0') {
-      document.getElementById('con-sesion').remove();
-      document.getElementById('sin-sesion').style.display = '';
-    }
+    if (SGD_SESION.obtener()) location.replace('bandeja.html');
+    document.getElementById('ingreso').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var u = this.usuario.value.trim(), c = this.clave.value;
+      if (!u || !c) { document.getElementById('error').textContent = 'Ingrese usuario y contraseña.'; return; }
+      SGD_SESION.iniciar(u);
+      location.href = 'bandeja.html';
+    });
   </script>
 </body>
 </html>

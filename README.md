@@ -6,7 +6,8 @@ Este repositorio contiene dos prototipos:
 |---|---|
 | `extension/` | **LEGAL · Conector SGD**: extensión de Chrome (Manifest V3) que lee los datos de un trámite del SGD y los vincula a un proceso legal. Solo lee. |
 | `portal/` | **Portal LEGAL**: portal web estático con el panel institucional (Gerencia) y las vistas del Responsable: Mi panel, Tablero de actividades (kanban), Mis procesos, Plantillas de procesos y Trámites SGD indexados. |
-| `pruebas/sgd-simulado/` | Página que imita una vista de detalle de expediente del SGD, para probar la extensión sin entrar al sistema real. |
+| `pruebas/sgd-simulado/` | SGD simulado (inicio de sesión, bandeja y detalle de 6 expedientes ficticios) para probar la extensión sin entrar al sistema real. |
+| `servidor/` | **LEGAL-Prueba**: ejecutable que levanta el entorno de prueba completo con una base de datos NoSQL embebida. |
 
 ---
 
@@ -39,11 +40,7 @@ N.° de expediente, N.° de registro / CUT / hoja de ruta, tipo y N.° de docume
 
 ### Prueba sin el SGD real
 
-```bash
-python3 -m http.server 8765      # desde la raíz del repositorio
-```
-
-En Configuración, registrar `http://localhost:8765/pruebas/sgd-simulado/` y abrir `http://localhost:8765/pruebas/sgd-simulado/index.html`. Con `?sesion=0` se simula la pantalla de ingreso, y el conector no se habilita.
+La forma más simple es el **entorno de prueba `LEGAL-Prueba.exe`** (sección 3). Para hacerlo a mano, sirva la raíz del repositorio con `python3 -m http.server 8765`, configure `http://localhost:8765/pruebas/sgd-simulado/` como dirección del SGD y abra esa dirección. El SGD simulado acepta cualquier usuario y contraseña; sin sesión, el conector no se habilita.
 
 ### Intercambio con el portal
 
@@ -74,3 +71,37 @@ Reglas del portal:
 - Las actividades vencidas y las que vencen en 7 días o menos se marcan con un ícono y una etiqueta, nunca solo con color.
 
 Los datos de ejemplo se calculan a partir de la fecha actual. Los cambios se guardan en el `localStorage` del navegador y se pueden borrar con **Restablecer datos de ejemplo**.
+
+---
+
+## 3. Entorno de prueba `LEGAL-Prueba.exe`
+
+Un único ejecutable de Windows que se inicia con **doble clic, sin ventana de consola**:
+
+1. Crea la **base de datos de prueba** si no existe: `%LOCALAPPDATA%\LEGAL-Prueba\legal-prueba.db`. Es [bbolt](https://github.com/etcd-io/bbolt), un almacén NoSQL clave-valor embebido en un solo archivo; no hay que instalar ningún motor.
+2. Copia la **extensión ya configurada** en `%LOCALAPPDATA%\LEGAL-Prueba\extension-conector-sgd`, apuntando al SGD simulado y al servidor local.
+3. Levanta el servidor en `http://localhost:8790`, accesible solo desde el propio equipo:
+   - `/`: Centro de pruebas, con los pasos, el estado de la BD, las últimas vinculaciones y el botón para reiniciar la BD.
+   - `/sgd-simulado/`: SGD simulado.
+   - `/portal/`: Portal LEGAL. Lee y guarda en la BD e incorpora cada 8 segundos lo que registra el Conector.
+   - `/api/…`: API que usa el Conector (catálogo, registro de vinculaciones con las reglas de negocio) y el portal.
+4. Abre el Centro de pruebas en el navegador y muestra un ícono **LEGAL** en la bandeja del sistema, junto al reloj. Desde ese ícono se abren el portal, el SGD simulado y las carpetas, o se detiene con **Detener y salir**.
+
+Si se vuelve a hacer doble clic con el entorno ya en ejecución, solo se abre el Centro de pruebas. El registro de actividad queda en `%LOCALAPPDATA%\LEGAL-Prueba\registro.log`.
+
+Con el servidor, el Conector muestra «Conectado a LEGAL · Entorno de prueba» y cada vinculación se valida y guarda en la BD:
+
+- Anexar a un proceso finalizado → rechazado (409).
+- Proceso inexistente → 404.
+- Datos obligatorios faltantes o un procedimiento que no corresponde a la categoría → 422.
+- Para los procesos nuevos, el servidor asigna el código correlativo.
+
+Si el servidor no responde, el Conector sigue funcionando en modo local.
+
+**Construir** (requiere Go 1.22+ y Node.js):
+
+```bash
+servidor/construir.sh     # genera servidor/dist/LEGAL-Prueba.exe y servidor/dist/legal-prueba-linux
+```
+
+El script empaqueta `portal/`, `pruebas/sgd-simulado/` y `extension/` dentro del ejecutable y corre `go vet` y las pruebas de la API (`servidor/api_test.go`). En Linux o macOS puede ejecutarse con `-sin-bandeja` y `-datos <carpeta>`.
