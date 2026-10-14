@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>LEGAL · Conector SGD</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="cabecera">
+    <img src="../icons/icon-32.png" alt="" width="24" height="24">
+    <div class="cabecera__titulo">
+      <strong>LEGAL · Conector SGD</strong>
+      <span>Vinculación de trámites documentarios</span>
+    </div>
+    <span class="insignia" title="La extensión solo lee información de la página. No ejecuta acciones en el SGD.">Solo lectura</span>
+  </header>
+
+  <!-- Estado de la sesión SGD -->
+  <section id="estado" class="estado estado--verificando" aria-live="polite">
+    <div class="estado__icono" aria-hidden="true"></div>
+    <div>
+      <strong id="estado-titulo">Verificando sesión en el SGD…</strong>
+      <p id="estado-detalle"></p>
+      <button id="btn-configurar" class="btn btn--secundario oculto" type="button">Abrir configuración</button>
+    </div>
+  </section>
+
+  <main id="principal" class="oculto">
+    <nav class="pestanas" role="tablist">
+      <button class="pestana activa" role="tab" data-pestana="registro" aria-selected="true">Registrar vinculación</button>
+      <button class="pestana" role="tab" data-pestana="indexados" aria-selected="false">Trámites indexados <span id="contador-indexados" class="contador">0</span></button>
+    </nav>
+
+    <!-- ============ PESTAÑA: REGISTRO ============ -->
+    <form id="form-registro" class="panel" data-panel="registro" novalidate>
+      <fieldset class="bloque">
+        <legend><span class="paso">1</span> Datos del trámite SGD</legend>
+        <p class="ayuda" id="resumen-lectura"></p>
+        <div class="rejilla">
+          <label>N.° de expediente<input name="nroExpediente" autocomplete="off"></label>
+          <label>N.° de registro / CUT<input name="nroRegistro" autocomplete="off"></label>
+          <label>Tipo de documento<input name="tipoDocumento" autocomplete="off"></label>
+          <label>N.° de documento<input name="nroDocumento" autocomplete="off"></label>
+          <label class="ancho">Asunto del documento<textarea name="asunto" rows="2"></textarea></label>
+          <label>Remitente<input name="remitente" autocomplete="off"></label>
+          <label>Dependencia de origen<input name="dependencia" autocomplete="off"></label>
+          <label>Fecha del documento<input name="fechaDocumento" autocomplete="off"></label>
+          <label>Estado en el SGD<input name="estadoSgd" autocomplete="off"></label>
+        </div>
+        <div id="seleccion" class="aviso aviso--info oculto">
+          <span>Hay texto seleccionado en la página.</span>
+          <button type="button" class="enlace" id="btn-usar-seleccion">Usar como asunto</button>
+        </div>
+        <label class="ancho">Enlace directo al trámite en el SGD
+          <input name="enlaceSgd" type="url" required>
+        </label>
+        <p class="ayuda" id="origen-enlace"></p>
+        <div class="acciones-linea">
+          <button type="button" class="btn btn--secundario" id="btn-releer">Volver a leer la página</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">2</span> Tipo de vinculación</legend>
+        <div class="segmentado" role="radiogroup">
+          <label><input type="radio" name="modo" value="anexo" checked><span>Anexar a proceso existente</span></label>
+          <label><input type="radio" name="modo" value="nuevo"><span>Generar nuevo proceso</span></label>
+        </div>
+
+        <div class="filtros">
+          <label>Categoría<select name="categoria"></select></label>
+          <label>Procedimiento<select name="procedimiento"></select></label>
+          <label class="ancho">Responsable<select name="responsable"></select></label>
+        </div>
+
+        <div id="modo-anexo">
+          <label class="ancho">Buscar por código o denominación
+            <input name="busqueda" type="search" placeholder="Ej.: PL-2026-0004 o arbitraje" autocomplete="off">
+          </label>
+          <p class="ayuda" id="resumen-busqueda"></p>
+          <ul id="lista-procesos" class="lista-procesos" role="radiogroup" aria-label="Procesos en curso"></ul>
+        </div>
+
+        <div id="modo-nuevo" class="oculto">
+          <label class="ancho">Denominación del proceso
+            <input name="denominacion" autocomplete="off" placeholder="Ej.: Recurso de apelación – Resolución N.° …">
+          </label>
+          <p class="ayuda">Código que se asignará: <strong id="codigo-nuevo">—</strong> · Estado inicial: <strong>Registrado</strong></p>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">3</span> Asunto de la vinculación</legend>
+        <label class="ancho">Descripción de la actuación
+          <textarea name="asuntoVinculacion" rows="3" required placeholder="Ej.: Se incorpora escrito de la parte demandante para evaluación y absolución de traslado."></textarea>
+        </label>
+      </fieldset>
+
+      <div id="mensaje" class="aviso oculto" role="status"></div>
+
+      <footer class="pie">
+        <button type="submit" class="btn btn--primario" id="btn-registrar">Registrar vinculación</button>
+      </footer>
+    </form>
+
+    <!-- ============ PESTAÑA: INDEXADOS ============ -->
+    <section class="panel oculto" data-panel="indexados">
+      <div class="acciones-linea">
+        <input id="filtro-indexados" type="search" placeholder="Filtrar trámites indexados…" aria-label="Filtrar trámites indexados">
+        <button type="button" class="btn btn--secundario" id="btn-exportar">Exportar para LEGAL</button>
+      </div>
+      <ul id="lista-indexados" class="lista-indexados"></ul>
+    </section>
+  </main>
+
+  <script src="../shared/catalogo.js"></script>
+  <script src="../shared/almacen.js"></script>
+  <script src="../shared/lector.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

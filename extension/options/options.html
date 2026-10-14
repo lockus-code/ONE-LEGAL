@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Configuración · LEGAL Conector SGD</title>
+  <link rel="stylesheet" href="../popup/popup.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body class="opciones">
+  <header class="cabecera">
+    <img src="../icons/icon-32.png" alt="" width="24" height="24">
+    <div class="cabecera__titulo">
+      <strong>LEGAL · Conector SGD</strong>
+      <span>Configuración del conector</span>
+    </div>
+    <span class="insignia">Solo lectura</span>
+  </header>
+
+  <main class="contenedor">
+    <form id="form-config" novalidate>
+      <fieldset class="bloque">
+        <legend><span class="paso">1</span> Sistema de Gestión Documental</legend>
+        <label>Dirección(es) del SGD institucional (una por línea)
+          <textarea name="urlsSgd" rows="3" placeholder="https://sgd.institucion.gob.pe/"></textarea>
+        </label>
+        <p class="ayuda">El conector solo se habilita en páginas cuya dirección empiece con alguno de estos prefijos. Al guardar, Chrome solicitará permiso de lectura sobre ese dominio (necesario para leer marcos internos del SGD).</p>
+        <label>Modo de habilitación del ícono
+          <select name="modoActivacion">
+            <option value="indicador">Con indicador de sesión activa (recomendado)</option>
+            <option value="dominio">En cualquier página del SGD (la sesión se verifica al abrir)</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">2</span> Detección de sesión activa</legend>
+        <label>Selectores CSS que indican sesión iniciada (uno por línea)
+          <textarea name="selectoresSesion" rows="6" spellcheck="false"></textarea>
+        </label>
+        <p class="ayuda">Usar selectores simples, sin espacios ni combinadores (p. ej. <code>a[href*='logout']</code>, <code>#lnkCerrarSesion</code>). Son evaluados por Chrome para habilitar el ícono.</p>
+        <label>Textos de cierre de sesión visibles (uno por línea)
+          <textarea name="textosSesion" rows="4"></textarea>
+        </label>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">3</span> Enlace directo al trámite</legend>
+        <label>Plantilla de enlace permanente (opcional)
+          <input name="plantillaEnlace" placeholder="https://sgd.institucion.gob.pe/sgd/consulta?expediente={nroExpediente}" spellcheck="false">
+        </label>
+        <p class="ayuda">Variables disponibles: <code>{nroExpediente}</code>, <code>{nroRegistro}</code>, <code>{url}</code>. Si se deja vacío, se almacena la dirección de la página del SGD sin identificadores de sesión.</p>
+        <label>Parámetros de sesión que se retiran del enlace (separados por coma)
+          <input name="parametrosSensibles" spellcheck="false">
+        </label>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">4</span> Usuario y catálogo de procesos</legend>
+        <label>Usuario LEGAL (trazabilidad de la captura)
+          <input name="usuarioLegal" placeholder="Ej.: mquispe">
+        </label>
+        <p class="ayuda" id="origen-catalogo"></p>
+        <div class="acciones-linea">
+          <label class="btn btn--secundario archivo">Importar catálogo (JSON)<input type="file" id="archivo-catalogo" accept="application/json"></label>
+          <button type="button" class="btn btn--secundario" id="btn-catalogo-ref">Restablecer catálogo referencial</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">5</span> Datos registrados localmente</legend>
+        <p class="ayuda" id="resumen-datos"></p>
+        <div class="acciones-linea">
+          <button type="button" class="btn btn--secundario" id="btn-exportar">Exportar para LEGAL (JSON)</button>
+          <button type="button" class="btn btn--secundario peligro" id="btn-limpiar">Eliminar registros locales</button>
+        </div>
+      </fieldset>
+
+      <div id="mensaje" class="aviso oculto" role="status"></div>
+      <div class="pie"><button class="btn btn--primario" type="submit">Guardar configuración</button></div>
+    </form>
+  </main>
+
+  <script src="../shared/catalogo.js"></script>
+  <script src="../shared/almacen.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

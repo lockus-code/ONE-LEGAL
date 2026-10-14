@@ -1,0 +1,10 @@
+body.opciones { width: auto; max-height: none; min-height: 100vh; }
+.contenedor { max-width: 760px; margin: 20px auto 40px; padding: 0 16px; }
+.contenedor .bloque { padding: 14px 16px 16px; }
+.contenedor textarea, .contenedor input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.contenedor input[name=usuarioLegal] { font-family: inherit; font-size: 13px; }
+code { background: var(--fondo); padding: 0 4px; border-radius: 3px; }
+.archivo { position: relative; margin: 0; flex-direction: row; font-size: 13px; }
+.archivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.peligro { color: var(--error); }
+.pie .btn--primario { width: auto; padding: 10px 24px; }

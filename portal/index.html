@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LEGAL · Gestión de Procesos</title>
+  <meta name="description" content="Portal institucional de gestión de procesos legales, actividades y trámites SGD indexados (prototipo con datos de ejemplo).">
+  <link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+  <a class="saltar" href="#vista">Ir al contenido</a>
+  <div class="app">
+    <aside class="lateral" id="lateral">
+      <div class="marca">
+        <span class="marca__logo" aria-hidden="true">L</span>
+        <div>
+          <strong>LEGAL</strong>
+          <span>Gestión de Procesos Legales</span>
+        </div>
+      </div>
+      <nav id="menu" class="menu" aria-label="Navegación principal"></nav>
+      <div class="lateral__pie">
+        <button type="button" class="btn-texto" id="btn-restablecer">Restablecer datos de ejemplo</button>
+        <span>Prototipo · datos de ejemplo</span>
+      </div>
+    </aside>
+
+    <div class="marco">
+      <header class="superior">
+        <button type="button" class="btn-icono menu-movil" id="btn-menu" aria-label="Abrir menú" aria-controls="lateral" aria-expanded="false">☰</button>
+        <div class="superior__titulo">
+          <h1 id="titulo-vista">Panel</h1>
+          <p id="subtitulo-vista"></p>
+        </div>
+        <div class="perfil">
+          <label class="perfil__rol">
+            <span>Perfil de acceso</span>
+            <select id="selector-perfil" aria-label="Perfil de acceso"></select>
+          </label>
+          <span class="avatar" id="avatar" aria-hidden="true"></span>
+        </div>
+      </header>
+      <main id="vista" class="vista" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal__fondo" data-cerrar></div>
+    <div class="modal__caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <div id="modal-contenido"></div>
+    </div>
+  </div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <div id="notificacion" class="notificacion" role="status" hidden></div>
+
+  <script src="js/datos.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

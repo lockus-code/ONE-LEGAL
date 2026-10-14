@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "LEGAL · Conector SGD",
+  "short_name": "LEGAL SGD",
+  "version": "0.1.0",
+  "description": "Lector institucional de trámites del Sistema de Gestión Documental (SGD) para su vinculación a procesos legales en LEGAL. Solo lectura.",
+  "minimum_chrome_version": "110",
+  "permissions": ["storage", "activeTab", "scripting", "declarativeContent"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "LEGAL · Conector SGD (requiere sesión activa en el SGD)",
+    "default_popup": "popup/popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  },
+  "options_page": "options/options.html",
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+}
