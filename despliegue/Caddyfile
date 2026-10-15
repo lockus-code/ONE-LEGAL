@@ -1,0 +1,45 @@
+# LEGAL · Proxy HTTPS (Caddy) delante del servidor LEGAL (127.0.0.1:8790).
+# Los valores {$...} vienen de /etc/caddy/legal.env y los usuarios de /etc/caddy/legal-usuarios
+# (ninguno de los dos se guarda en el repositorio).
+# Caddy obtiene y renueva solo el certificado HTTPS (Let's Encrypt).
+{
+	email {$LEGAL_CORREO_ACME}
+}
+
+{$LEGAL_DOMINIO} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/legal-acceso.log {
+			roll_keep 14
+		}
+	}
+
+	@fueraDeRed not remote_ip {$LEGAL_IPS_PERMITIDAS}
+	@paginas not path /api/*
+
+	# El orden dentro de "route" es el orden de evaluación.
+	route {
+		# 1. Solo redes autorizadas (red institucional / VPN).
+		respond @fueraDeRed "Acceso restringido a la red institucional." 403
+		# 2. El reinicio de la base de datos de prueba no se expone en el servidor.
+		respond /api/reiniciar "No disponible en este servidor." 403
+		# 3. La raíz lleva al portal.
+		redir / /portal/ 302
+		# 4. Las páginas (portal, SGD simulado) piden usuario y contraseña.
+		#    /api/* queda sin contraseña porque la usa la extensión (protegido por el paso 1).
+		basic_auth @paginas {
+			# Una línea por usuario: "usuario hash" (hash generado con: caddy hash-password)
+			import /etc/caddy/legal-usuarios
+		}
+		reverse_proxy 127.0.0.1:8790
+	}
+}

@@ -1,0 +1,95 @@
+# LEGAL · Construcción, pruebas y despliegue en el servidor de Hetzner.
+#
+# - En cada pull request y en cada push a main: construye y corre las pruebas.
+# - En push a main (o al ejecutarlo a mano desde la pestaña Actions): además despliega.
+#
+# Secretos requeridos en el entorno «produccion» (Settings › Environments › produccion):
+#   HETZNER_HOST         IP pública o dominio del servidor
+#   HETZNER_SSH_KEY      llave privada de despliegue (contenido de legal-despliegue)
+#   HETZNER_KNOWN_HOSTS  huella del servidor (salida de: ssh-keyscan -t ed25519 <IP>)
+# Ver docs/12-despliegue-hetzner.md.
+
+name: Desplegar en Hetzner
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desplegar-hetzner-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    name: Construir y probar
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: servidor/go.mod
+          cache-dependency-path: servidor/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Construir (go vet, pruebas y binarios)
+        run: servidor/construir.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legal-${{ github.sha }}
+          path: |
+            servidor/dist/legal-prueba-linux
+            servidor/dist/LEGAL-Prueba.exe
+            despliegue/Caddyfile
+          retention-days: 14
+
+  desplegar:
+    name: Desplegar en Hetzner
+    needs: construir
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    environment: produccion
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: legal-${{ github.sha }}
+          path: entrega
+
+      - name: Preparar SSH
+        env:
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          HETZNER_KNOWN_HOSTS: ${{ secrets.HETZNER_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$HETZNER_SSH_KEY" > ~/.ssh/legal-despliegue
+          chmod 0600 ~/.ssh/legal-despliegue
+          printf '%s\n' "$HETZNER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copiar archivos al servidor
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          scp -i ~/.ssh/legal-despliegue -o StrictHostKeyChecking=yes \
+            entrega/servidor/dist/legal-prueba-linux "despliegue@${HETZNER_HOST}:entrega/legal-prueba"
+          scp -i ~/.ssh/legal-despliegue -o StrictHostKeyChecking=yes \
+            entrega/despliegue/Caddyfile "despliegue@${HETZNER_HOST}:entrega/Caddyfile"
+
+      - name: Instalar y verificar
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          ssh -i ~/.ssh/legal-despliegue -o StrictHostKeyChecking=yes \
+            "despliegue@${HETZNER_HOST}" sudo /usr/local/sbin/legal-actualizar
+
+      - name: Limpiar llave
+        if: always()
+        run: rm -f ~/.ssh/legal-despliegue

@@ -1,0 +1,187 @@
+#cloud-config
+# LEGAL · Preparación inicial del servidor en Hetzner Cloud (Ubuntu 24.04).
+#
+# Pegue este contenido en «Cloud config» al crear el servidor, DESPUÉS de reemplazar
+# PEGUE_AQUI_LA_LLAVE_PUBLICA_DE_DESPLIEGUE por la llave pública de GitHub Actions
+# (archivo legal-despliegue.pub; ver docs/12-despliegue-hetzner.md, paso 2).
+#
+# Deja instalado:
+#   - Caddy (HTTPS automático) como proxy delante del servidor LEGAL.
+#   - Servicio systemd «legal» (usuario sin privilegios «legal», datos en /var/lib/legal).
+#   - Usuario «despliegue» para GitHub Actions, que solo puede ejecutar legal-actualizar.
+#   - Respaldo diario de la base de datos (14 días) y actualizaciones de seguridad automáticas.
+
+timezone: America/Lima
+package_update: true
+package_upgrade: true
+packages:
+  - curl
+  - gnupg
+  - debian-keyring
+  - debian-archive-keyring
+  - apt-transport-https
+  - unattended-upgrades
+  - fail2ban
+
+users:
+  - default
+  - name: despliegue
+    gecos: Despliegue automatico desde GitHub Actions
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - PEGUE_AQUI_LA_LLAVE_PUBLICA_DE_DESPLIEGUE
+
+write_files:
+  # SSH solo con llave.
+  - path: /etc/ssh/sshd_config.d/10-legal.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+
+  # Servicio del servidor LEGAL (escucha solo en 127.0.0.1:8790; Caddy lo publica por HTTPS).
+  - path: /etc/systemd/system/legal.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=LEGAL - servidor de procesos legales y API del Conector SGD
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=/opt/legal/bin/legal-prueba
+
+      [Service]
+      User=legal
+      Group=legal
+      ExecStart=/opt/legal/bin/legal-prueba -sin-bandeja -no-abrir -datos /var/lib/legal
+      Restart=on-failure
+      RestartSec=3
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      PrivateDevices=true
+      ProtectKernelTunables=true
+      ProtectControlGroups=true
+      RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+      ReadWritePaths=/var/lib/legal
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # Caddy lee dominio, correo e IP permitidas desde /etc/caddy/legal.env.
+  - path: /etc/systemd/system/caddy.service.d/legal.conf
+    permissions: "0644"
+    content: |
+      [Service]
+      EnvironmentFile=-/etc/caddy/legal.env
+
+  # Instalación de una nueva versión (la ejecuta GitHub Actions con sudo).
+  - path: /usr/local/sbin/legal-actualizar
+    permissions: "0750"
+    content: |
+      #!/usr/bin/env bash
+      # Instala la versión entregada en /home/despliegue/entrega y verifica que responda.
+      # Si la nueva versión no responde en 20 s, restaura la anterior.
+      set -euo pipefail
+      ENTREGA=/home/despliegue/entrega
+      BIN=/opt/legal/bin/legal-prueba
+
+      [[ -f "$ENTREGA/legal-prueba" ]] || { echo "Falta $ENTREGA/legal-prueba"; exit 1; }
+      [[ "$(head -c 4 "$ENTREGA/legal-prueba" | od -An -c | tr -d ' \n')" == '177ELF' ]] || { echo "El archivo entregado no es un ejecutable Linux"; exit 1; }
+
+      if [[ -f "$ENTREGA/Caddyfile" ]]; then
+        caddy validate --adapter caddyfile --config "$ENTREGA/Caddyfile" --envfile /etc/caddy/legal.env
+        install -o root -g caddy -m 0640 "$ENTREGA/Caddyfile" /etc/caddy/Caddyfile
+      fi
+
+      /usr/local/sbin/legal-respaldo antes-de-actualizar || true
+      [[ -f "$BIN" ]] && cp -a "$BIN" "$BIN.anterior"
+      install -o root -g root -m 0755 "$ENTREGA/legal-prueba" "$BIN.nuevo"
+      mv -f "$BIN.nuevo" "$BIN"
+
+      systemctl restart legal
+      systemctl reload caddy || systemctl restart caddy
+
+      for _ in $(seq 1 20); do
+        if curl -fsS http://127.0.0.1:8790/api/estado >/dev/null; then
+          echo "LEGAL actualizado y respondiendo."
+          exit 0
+        fi
+        sleep 1
+      done
+      echo "La nueva versión no responde. Se restaura la anterior."
+      if [[ -f "$BIN.anterior" ]]; then mv -f "$BIN.anterior" "$BIN"; systemctl restart legal; fi
+      exit 1
+
+  - path: /etc/sudoers.d/legal-despliegue
+    permissions: "0440"
+    content: |
+      despliegue ALL=(root) NOPASSWD: /usr/local/sbin/legal-actualizar
+
+  # Respaldo de la base de datos (detiene el servicio unos segundos para copiar el archivo de forma consistente).
+  - path: /usr/local/sbin/legal-respaldo
+    permissions: "0750"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      ORIGEN=/var/lib/legal/legal-prueba.db
+      DESTINO=/var/backups/legal
+      [[ -f "$ORIGEN" ]] || exit 0
+      SELLO="$(date +%Y%m%d-%H%M%S)${1:+-$1}"
+      systemctl stop legal
+      trap 'systemctl start legal' EXIT
+      install -o root -g root -m 0600 "$ORIGEN" "$DESTINO/legal-prueba-$SELLO.db"
+      find "$DESTINO" -name 'legal-prueba-*.db' -mtime +14 -delete
+      echo "Respaldo: $DESTINO/legal-prueba-$SELLO.db"
+
+  - path: /etc/systemd/system/legal-respaldo.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=LEGAL - respaldo diario de la base de datos
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/legal-respaldo diario
+
+  - path: /etc/systemd/system/legal-respaldo.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=LEGAL - respaldo diario (03:30, hora de Lima)
+
+      [Timer]
+      OnCalendar=*-*-* 03:30:00
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  # Configuración inicial de Caddy (se completa en el paso 6 del instructivo)
+  - install -d -m 0755 /etc/caddy
+  - test -f /etc/caddy/legal.env || printf 'LEGAL_DOMINIO=:80\nLEGAL_CORREO_ACME=configure-este-correo@ejemplo.invalid\nLEGAL_IPS_PERMITIDAS=127.0.0.1/32\n' > /etc/caddy/legal.env
+  - test -f /etc/caddy/legal-usuarios || printf '# usuario hash\n' > /etc/caddy/legal-usuarios
+  # Caddy desde su repositorio oficial
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  - curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' -o /etc/apt/sources.list.d/caddy-stable.list
+  - chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+  # Usuario y carpetas
+  - useradd --system --home-dir /var/lib/legal --shell /usr/sbin/nologin legal
+  - install -d -o legal -g legal -m 0750 /var/lib/legal
+  - install -d -o root -g root -m 0755 /opt/legal/bin
+  - install -d -o root -g root -m 0700 /var/backups/legal
+  - install -d -o despliegue -g despliegue -m 0750 /home/despliegue/entrega
+  - chown root:caddy /etc/caddy/legal.env /etc/caddy/legal-usuarios
+  - chmod 0640 /etc/caddy/legal.env /etc/caddy/legal-usuarios
+  # Servicios
+  - systemctl daemon-reload
+  - systemctl enable legal.service legal-respaldo.timer
+  - systemctl start legal-respaldo.timer
+  - systemctl restart caddy
+  - systemctl enable --now fail2ban
+  - systemctl restart ssh

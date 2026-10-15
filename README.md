@@ -118,3 +118,13 @@ servidor/construir.sh     # genera servidor/dist/LEGAL-Prueba.exe y servidor/dis
 ```
 
 El script empaqueta `portal/`, `pruebas/sgd-simulado/` y `extension/` dentro del ejecutable y corre `go vet` y las pruebas de la API (`servidor/api_test.go`). En Linux o macOS puede ejecutarse con `-sin-bandeja` y `-datos <carpeta>`.
+
+---
+
+## 4. Despliegue en Hetzner Cloud
+
+El instructivo completo está en [`docs/12-despliegue-hetzner.md`](docs/12-despliegue-hetzner.md). Usa:
+
+- `despliegue/cloud-init.yml`: deja el servidor Ubuntu 24.04 listo (Caddy con HTTPS, servicio `legal`, usuario de despliegue limitado, respaldo diario y fail2ban).
+- `despliegue/Caddyfile`: proxy HTTPS con filtro por IP institucional, contraseña para el portal y bloqueo de `/api/reiniciar`.
+- `.github/workflows/desplegar-hetzner.yml`: construye y prueba en cada pull request; en cada push a `main` despliega por SSH y vuelve a la versión anterior si la nueva no responde.

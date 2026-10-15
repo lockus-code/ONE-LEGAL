@@ -1,0 +1,5 @@
+# /etc/caddy/legal-usuarios — usuarios del portal LEGAL (NO subir al repositorio con datos reales).
+# Una línea por usuario:  <usuario> <hash>
+# Genere el hash en el servidor con:  caddy hash-password   (pide la contraseña dos veces)
+# Después de editarlo:  sudo systemctl reload caddy
+legal $2a$14$REEMPLAZAR_POR_EL_HASH_GENERADO
