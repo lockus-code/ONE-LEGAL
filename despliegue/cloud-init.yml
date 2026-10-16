@@ -54,7 +54,7 @@ write_files:
       [Service]
       User=legal
       Group=legal
-      ExecStart=/opt/legal/bin/legal-prueba -sin-bandeja -no-abrir -datos /var/lib/legal
+      ExecStart=/opt/legal/bin/legal-prueba -sin-bandeja -no-abrir -host 127.0.0.1 -datos /var/lib/legal -config /var/lib/legal
       Restart=on-failure
       RestartSec=3
       NoNewPrivileges=true
@@ -126,15 +126,15 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      ORIGEN=/var/lib/legal/legal-prueba.db
+      ORIGEN=/var/lib/legal/legal.db
       DESTINO=/var/backups/legal
       [[ -f "$ORIGEN" ]] || exit 0
       SELLO="$(date +%Y%m%d-%H%M%S)${1:+-$1}"
       systemctl stop legal
       trap 'systemctl start legal' EXIT
-      install -o root -g root -m 0600 "$ORIGEN" "$DESTINO/legal-prueba-$SELLO.db"
-      find "$DESTINO" -name 'legal-prueba-*.db' -mtime +14 -delete
-      echo "Respaldo: $DESTINO/legal-prueba-$SELLO.db"
+      install -o root -g root -m 0600 "$ORIGEN" "$DESTINO/legal-$SELLO.db"
+      find "$DESTINO" -name 'legal-*.db' -mtime +14 -delete
+      echo "Respaldo: $DESTINO/legal-$SELLO.db"
 
   - path: /etc/systemd/system/legal-respaldo.service
     permissions: "0644"

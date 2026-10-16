@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "LEGAL · Conector SGD",
   "short_name": "LEGAL SGD",
-  "version": "0.3.0",
-  "description": "Lector institucional de trámites del SGD para vincularlos a procesos legales en LEGAL, desde el panel lateral de Chrome. Solo lectura.",
+  "version": "1.0.0",
+  "description": "Lee el trámite del SGD (solo lectura) y lo indexa en LEGAL como proceso nuevo o existente, desde el panel lateral de Chrome.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -13,8 +13,8 @@
   ],
   "host_permissions": [
     "https://sgd.sedapar.com.pe/*",
-    "http://localhost:8790/*",
-    "http://127.0.0.1:8790/*"
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "optional_host_permissions": [
     "https://*/*",

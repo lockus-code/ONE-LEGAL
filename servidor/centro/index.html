@@ -3,199 +3,51 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LEGAL · Centro de pruebas</title>
+  <title>LEGAL · Inicio</title>
   <style>
-    :root {
-      color-scheme: light;
-      --institucional: #12345f; --institucional-2: #1d4f8c; --acento: #c9a227;
-      --plano: #f4f6f9; --superficie: #fff; --superficie-2: #f8f9fb;
-      --tinta: #14181f; --tinta-2: #4b5563; --tenue: #6b7380; --borde: #e1e5eb;
-      --bueno: #006300; --bueno-fondo: #e7f5e7; --critico: #b42318; --critico-fondo: #fdecea;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 14px; color: var(--tinta);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root { color-scheme: dark; --institucional: #0f2747; --institucional-2: #6ea3e6; --plano: #0f1115; --superficie: #171a20; --superficie-2: #1d2128;
-        --tinta: #eef0f3; --tinta-2: #c3c8d0; --tenue: #9aa1ab; --borde: #2a2f38; --bueno: #5fd35f; --bueno-fondo: #15301a; --critico: #f08585; --critico-fondo: #3a1d1d; }
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--plano); }
-    header { background: var(--institucional); color: #fff; border-bottom: 3px solid var(--acento); }
-    .envoltura { max-width: 1080px; margin: 0 auto; padding: 20px 16px; }
-    header .envoltura { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding-block: 16px; }
-    .logo { width: 36px; height: 36px; border-radius: 8px; background: #fff; color: #12345f; display: grid; place-items: center; font-weight: 800; box-shadow: inset 0 -4px 0 var(--acento); }
-    header h1 { font-size: 18px; margin: 0; }
-    header p { margin: 2px 0 0; opacity: .8; font-size: 13px; }
-    .pastilla { margin-left: auto; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.15); }
-    .rejilla { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
-    @media (max-width: 860px) { .rejilla { grid-template-columns: 1fr; } }
-    .tarjeta { background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px; padding: 18px; min-width: 0; }
-    h2 { font-size: 15px; margin: 0 0 12px; }
-    ol.pasos { margin: 0; padding: 0; list-style: none; counter-reset: paso; display: grid; gap: 16px; }
-    ol.pasos > li { counter-increment: paso; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; }
-    ol.pasos > li > div { min-width: 0; }
-    ol.pasos > li::before { content: counter(paso); width: 26px; height: 26px; border-radius: 50%; background: var(--institucional-2); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
-    ol.pasos h3 { margin: 2px 0 6px; font-size: 14px; }
-    ol.pasos p, ol.pasos ul { margin: 0 0 6px; color: var(--tinta-2); line-height: 1.5; }
-    ol.pasos ul { padding-left: 18px; }
-    .copiable { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-    .copiable code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
-    .btn { font: inherit; font-weight: 600; border: 1px solid var(--borde); background: var(--superficie); color: var(--tinta); border-radius: 8px; padding: 6px 12px; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap; }
-    .btn:hover { border-color: var(--institucional-2); }
-    .btn--primario { background: var(--institucional); color: #fff; border-color: transparent; }
-    .btn--peligro { color: var(--critico); }
-    .btn:focus-visible { outline: 2px solid var(--institucional-2); outline-offset: 1px; }
-    dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 14px; font-size: 13px; }
-    dt { color: var(--tenue); } dd { margin: 0; overflow-wrap: anywhere; }
-    .cifras { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-    .cifra { background: var(--superficie-2); border: 1px solid var(--borde); border-radius: 8px; padding: 10px 12px; }
-    .cifra strong { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
-    .cifra span { font-size: 12px; color: var(--tenue); }
-    .tabla { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { text-align: left; color: var(--tenue); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
-    td { padding: 8px; border-bottom: 1px solid var(--borde); vertical-align: top; }
-    .mono { font-family: ui-monospace, Consolas, monospace; }
-    .vacio { color: var(--tenue); text-align: center; padding: 16px; }
-    .aviso { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
-    .aviso--error { background: var(--critico-fondo); color: var(--critico); }
-    .aviso--ok { background: var(--bueno-fondo); color: var(--bueno); }
-    .confirmar { border: 1px solid var(--critico); border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
-    .confirmar div { display: flex; gap: 8px; margin-top: 8px; }
-    footer { color: var(--tenue); font-size: 12px; }
+    :root { --azul: #12345f; --oro: #c9a227; --tinta: #14181f; --tenue: #5b6572; --borde: #e1e5eb; --fondo: #f4f6f9; --sup: #fff; color-scheme: light; font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: var(--tinta); }
+    @media (prefers-color-scheme: dark) { :root { --tinta: #e8ebf0; --tenue: #a3adba; --borde: #2b313b; --fondo: #0f1115; --sup: #171a20; color-scheme: dark; } }
+    body { margin: 0; background: var(--fondo); }
+    header { background: var(--azul); color: #fff; border-bottom: 3px solid var(--oro); padding: 18px 16px; }
+    header div { max-width: 880px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; opacity: .85; }
+    main { max-width: 880px; margin: 20px auto; padding: 0 16px; display: grid; gap: 16px; }
+    .tarjeta { background: var(--sup); border: 1px solid var(--borde); border-radius: 10px; padding: 18px 20px; }
+    .tarjeta h2 { margin: 0 0 8px; font-size: 17px; }
+    .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    a.btn { display: inline-block; background: var(--azul); color: #fff; text-decoration: none; padding: 9px 14px; border-radius: 8px; font-weight: 600; margin-top: 8px; }
+    .tenue { color: var(--tenue); font-size: 13px; }
+    code { font-size: 12px; word-break: break-all; }
+    ol { padding-left: 20px; line-height: 1.6; }
   </style>
 </head>
 <body>
-  <header>
-    <div class="envoltura">
-      <span class="logo" aria-hidden="true">L</span>
-      <div><h1>LEGAL · Centro de pruebas</h1><p>Entorno local para probar el Conector SGD con una base de datos de prueba</p></div>
-      <span class="pastilla" id="estado-servidor">Verificando…</span>
-    </div>
-  </header>
-
-  <main class="envoltura">
+  <header><div><h1>LEGAL · Gestión de procesos legales</h1><p id="sub">Servidor de la intranet</p></div></header>
+  <main>
     <div class="rejilla">
-      <section class="tarjeta">
-        <h2>Cómo probar la extensión</h2>
-        <ol class="pasos">
-          <li><div>
-            <h3>Instale la extensión preconfigurada (una sola vez)</h3>
-            <ul>
-              <li>Abra una pestaña nueva y escriba esta dirección:</li>
-            </ul>
-            <div class="copiable"><code>chrome://extensions</code><button class="btn" data-copiar="chrome://extensions">Copiar</button></div>
-            <ul>
-              <li>Active <strong>Modo de desarrollador</strong> (arriba a la derecha).</li>
-              <li>Pulse <strong>Cargar descomprimida</strong> y seleccione esta carpeta (puede pegar la ruta en la barra del explorador):</li>
-            </ul>
-            <div class="copiable"><code id="ruta-extension">—</code><button class="btn" data-copiar-de="ruta-extension">Copiar ruta</button></div>
-            <p>Ya viene configurada para el SGD simulado y esta base de datos. Si instaló antes otra copia del Conector, quítela para evitar confusiones.</p>
-          </div></li>
-          <li><div>
-            <h3>Inicie sesión en el SGD simulado</h3>
-            <p>Imita la estructura del SGD de SEDAPAR con datos ficticios. Use cualquier usuario y contraseña. Sin sesión, el ícono del Conector permanece deshabilitado.</p>
-            <a class="btn btn--primario" id="enlace-sgd" href="/sgd-simulado/" target="_blank" rel="noopener">Abrir SGD simulado</a>
-          </div></li>
-          <li><div>
-            <h3>Capture un trámite con el Conector</h3>
-            <p>En <em>Mis Trámites</em> pulse <strong>Ingresar</strong> en un trámite y luego el ícono <strong>LEGAL</strong> de la barra de Chrome: se abre el <strong>panel lateral</strong>, que se actualiza solo al cambiar de trámite. Redacte el asunto, anexe el trámite a un proceso en curso o genere uno nuevo y pulse <strong>Registrar vinculación</strong>.</p>
-            <p>El mismo panel funciona en el SGD real (<code>https://sgd.sedapar.com.pe</code>): solo lee el n.º de trámite, el ID interno y la fecha de ingreso.</p>
-          </div></li>
-          <li><div>
-            <h3>Revise el resultado</h3>
-            <p>La vinculación aparece en la tabla de la derecha. El portal la incorpora en unos segundos en <em>Trámites SGD indexados</em> y en la actividad abierta del proceso.</p>
-            <a class="btn" href="/portal/" target="_blank" rel="noopener">Abrir Portal LEGAL</a>
-          </div></li>
-        </ol>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Base de datos de prueba</h2>
-        <div class="cifras">
-          <div class="cifra"><strong id="n-tramites">—</strong><span>trámites indexados</span></div>
-          <div class="cifra"><strong id="n-procesos">—</strong><span>procesos generados desde el Conector</span></div>
-        </div>
-        <dl>
-          <dt>Motor</dt><dd id="bd-motor">—</dd>
-          <dt>Archivo</dt><dd class="mono" id="bd-ruta">—</dd>
-          <dt>Creada</dt><dd id="bd-creada">—</dd>
-          <dt>Portal</dt><dd id="bd-portal">—</dd>
-        </dl>
-        <button class="btn btn--peligro" id="btn-reiniciar">Reiniciar base de datos</button>
-        <div class="confirmar" id="confirmar" hidden>
-          Se eliminarán todas las vinculaciones, los procesos generados y los datos del portal. ¿Continuar?
-          <div><button class="btn" id="btn-cancelar">Cancelar</button><button class="btn btn--primario" id="btn-confirmar">Reiniciar base de datos</button></div>
-        </div>
-        <div id="mensaje" role="status"></div>
-      </section>
+      <section class="tarjeta"><h2>Portal</h2><p class="tenue">Ingrese con su usuario: administrador, gerente, profesional o asistente.</p><a class="btn" href="/portal/">Abrir el portal</a></section>
+      <section class="tarjeta"><h2>Extensión Conector SGD</h2><p class="tenue">Ya configurada para este servidor. Se instala en Chrome de cada equipo.</p><a class="btn" href="/descargas/conector-sgd.zip">Descargar extensión</a></section>
+      <section class="tarjeta" id="tarjeta-sgd" hidden><h2>SGD simulado</h2><p class="tenue">Datos ficticios para practicar la indexación (acepta cualquier usuario).</p><a class="btn" href="/sgd-simulado/">Abrir SGD simulado</a></section>
     </div>
-
-    <section class="tarjeta" style="margin-top:16px">
-      <h2>Últimas vinculaciones registradas por el Conector</h2>
-      <div class="tabla"><table>
-        <thead><tr><th>Registrado</th><th>Expediente</th><th>Asunto del documento</th><th>Vinculación</th><th>Proceso</th><th>Enlace SGD</th></tr></thead>
-        <tbody id="filas"><tr><td colspan="6" class="vacio">Cargando…</td></tr></tbody>
-      </table></div>
+    <section class="tarjeta">
+      <h2>Instalar la extensión</h2>
+      <ol>
+        <li>Descargue el .zip y descomprímalo en una carpeta fija.</li>
+        <li>En Chrome abra <code>chrome://extensions</code> y active <strong>Modo de desarrollador</strong>.</li>
+        <li>Pulse <strong>Cargar descomprimida</strong> y elija la carpeta <code>legal-conector-sgd</code>.</li>
+        <li>Abra el SGD, inicie sesión, entre a un trámite y pulse el ícono <strong>LEGAL</strong>.</li>
+      </ol>
     </section>
-
-    <footer class="envoltura" style="padding-inline:0">
-      Para detener el entorno: ícono <strong>LEGAL</strong> en la bandeja del sistema (junto al reloj) → <strong>Detener y salir</strong>. Los datos se conservan para la próxima vez.
-    </footer>
+    <section class="tarjeta"><h2>Estado del servidor</h2><p class="tenue" id="estado">Consultando…</p></section>
   </main>
-
   <script>
-    (function () {
-      const $ = (id) => document.getElementById(id);
-      const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      const fecha = (iso) => iso ? new Date(iso).toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
-
-      function mensaje(tipo, texto) { $('mensaje').className = 'aviso aviso--' + tipo; $('mensaje').textContent = texto; }
-
-      async function actualizar() {
-        try {
-          const [e, v] = await Promise.all([
-            fetch('/api/estado').then((r) => r.json()),
-            fetch('/api/vinculaciones').then((r) => r.json())
-          ]);
-          $('estado-servidor').textContent = '● Servidor activo · v' + e.version;
-          $('ruta-extension').textContent = e.extension.ruta;
-          $('n-tramites').textContent = e.bd.tramites;
-          $('n-procesos').textContent = e.bd.procesosConector;
-          $('bd-motor').textContent = e.bd.motor;
-          $('bd-ruta').textContent = e.bd.ruta;
-          $('bd-creada').textContent = fecha(e.bd.creadaEn);
-          $('bd-portal').textContent = e.bd.portalInicializado ? 'Con datos (se guarda en esta BD)' : 'Aún no se abrió el portal';
-          const filas = v.tramitesIndexados.slice(0, 15);
-          $('filas').innerHTML = filas.length ? filas.map((t) => {
-            const vi = t.vinculacion || {};
-            return '<tr><td>' + esc(fecha(t.registradoEnBd || t.fechaCaptura)) + '</td><td class="mono">' + esc(t.nroExpediente || t.nroRegistro) +
-              '</td><td>' + esc(t.asunto) + '</td><td>' + (vi.modo === 'nuevo' ? 'Generó proceso' : 'Anexado') + '<div style="color:var(--tenue)">' + esc(t.asuntoVinculacion) + '</div></td><td><span class="mono">' +
-              esc(vi.procesoCodigo) + '</span><div style="color:var(--tenue)">' + esc(vi.procesoDenominacion) + '</div></td><td><a href="' + esc(t.enlaceSgd) + '" target="_blank" rel="noopener">Abrir</a></td></tr>';
-          }).join('') : '<tr><td colspan="6" class="vacio">Aún no hay vinculaciones. Capture un trámite desde el SGD simulado.</td></tr>';
-        } catch (err) {
-          $('estado-servidor').textContent = '○ Servidor detenido';
-        }
-      }
-
-      document.addEventListener('click', (ev) => {
-        const b = ev.target.closest('[data-copiar], [data-copiar-de]');
-        if (!b) return;
-        const valor = b.dataset.copiar || $(b.dataset.copiarDe).textContent;
-        navigator.clipboard.writeText(valor).then(() => { const t = b.textContent; b.textContent = 'Copiado'; setTimeout(() => { b.textContent = t; }, 1500); })
-          .catch(() => mensaje('error', 'No se pudo copiar. Seleccione el texto y cópielo con Ctrl+C.'));
-      });
-      $('btn-reiniciar').addEventListener('click', () => { $('confirmar').hidden = false; $('btn-cancelar').focus(); });
-      $('btn-cancelar').addEventListener('click', () => { $('confirmar').hidden = true; });
-      $('btn-confirmar').addEventListener('click', async () => {
-        $('confirmar').hidden = true;
-        const r = await fetch('/api/reiniciar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        if (r.ok) { mensaje('ok', 'Base de datos reiniciada. Recargue el portal si lo tiene abierto.'); actualizar(); }
-        else mensaje('error', 'No se pudo reiniciar la base de datos.');
-      });
-
-      actualizar();
-      setInterval(actualizar, 4000);
-    })();
+    fetch('/api/estado').then(function (r) { return r.json(); }).then(function (e) {
+      document.getElementById('sub').textContent = e.urlPublica + ' · versión ' + e.version;
+      document.getElementById('tarjeta-sgd').hidden = !e.sgdSimulado;
+      document.getElementById('estado').innerHTML = 'Base de datos ' + e.bd.motor + ', creada el ' + new Date(e.bd.creadaEn).toLocaleString('es-PE') +
+        '.<br>' + e.bd.usuarios + ' usuario(s), ' + e.bd.procesos + ' proceso(s), ' + e.bd.tramites + ' trámite(s) SGD indexados.<br>SGD habilitado(s): <code>' + e.sgdUrls.join(', ') + '</code>';
+    }).catch(function () { document.getElementById('estado').textContent = 'No se pudo consultar el servidor.'; });
   </script>
 </body>
 </html>

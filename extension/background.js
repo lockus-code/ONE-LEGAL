@@ -7,7 +7,7 @@
  * desde aquí) cuando la URL corresponde al SGD y se observa un indicador de
  * sesión. Al abrir la extensión, la sesión se verifica nuevamente.
  */
-importScripts('shared/entorno.js', 'shared/catalogo.js', 'shared/almacen.js');
+importScripts('shared/entorno.js', 'shared/almacen.js');
 
 async function actualizarReglasDeActivacion() {
   const config = await LegalAlmacen.obtenerConfiguracion();

@@ -46,38 +46,22 @@
       <fieldset class="bloque">
         <legend><span class="paso">3</span> Enlace directo al trámite</legend>
         <label>Plantilla de enlace permanente (opcional)
-          <input name="plantillaEnlace" placeholder="https://sgd.institucion.gob.pe/sgd/consulta?expediente={nroExpediente}" spellcheck="false">
+          <input name="plantillaEnlace" placeholder="https://sgd.institucion.gob.pe/sgd/consulta?tramite={nroTramite}" spellcheck="false">
         </label>
-        <p class="ayuda">Variables disponibles: <code>{nroExpediente}</code>, <code>{nroRegistro}</code>, <code>{url}</code>. Si se deja vacío, se almacena la dirección de la página del SGD sin identificadores de sesión.</p>
+        <p class="ayuda">Variables disponibles: <code>{nroTramite}</code>, <code>{idInterno}</code>, <code>{url}</code>. Si se deja vacío, se almacena la dirección de la página del SGD sin identificadores de sesión.</p>
         <label>Parámetros de sesión que se retiran del enlace (separados por coma)
           <input name="parametrosSensibles" spellcheck="false">
         </label>
       </fieldset>
 
       <fieldset class="bloque">
-        <legend><span class="paso">4</span> Usuario y catálogo de procesos</legend>
-        <label>Usuario LEGAL (trazabilidad de la captura)
-          <input name="usuarioLegal" placeholder="Ej.: mquispe">
+        <legend><span class="paso">4</span> Servidor LEGAL de la intranet</legend>
+        <label>Dirección del servidor LEGAL
+          <input name="servidorLegal" placeholder="http://192.168.1.25:8790" spellcheck="false">
         </label>
-        <label>Servidor LEGAL (opcional)
-          <input name="servidorLegal" placeholder="http://localhost:8790" spellcheck="false">
-        </label>
-        <p class="ayuda">Si se indica, el catálogo de procesos se obtiene del servidor y cada vinculación se registra en su base de datos. Sin servidor, los registros quedan en este navegador y se exportan en JSON.</p>
+        <p class="ayuda">Es la variable <code>LEGAL_URL_PUBLICA</code> del archivo <code>.env</code> del equipo donde se ejecuta LEGAL.exe. La extensión descargada desde ese servidor ya viene configurada. Todo lo que se indexa se guarda en su base de datos y se ve en el portal.</p>
         <div class="acciones-linea"><button type="button" class="btn btn--secundario" id="btn-probar-servidor">Probar conexión</button><span class="ayuda" id="estado-servidor" style="margin:0"></span></div>
-        <p class="ayuda" id="origen-catalogo"></p>
-        <div class="acciones-linea">
-          <label class="btn btn--secundario archivo">Importar catálogo (JSON)<input type="file" id="archivo-catalogo" accept="application/json"></label>
-          <button type="button" class="btn btn--secundario" id="btn-catalogo-ref">Restablecer catálogo referencial</button>
-        </div>
-      </fieldset>
-
-      <fieldset class="bloque">
-        <legend><span class="paso">5</span> Datos registrados localmente</legend>
-        <p class="ayuda" id="resumen-datos"></p>
-        <div class="acciones-linea">
-          <button type="button" class="btn btn--secundario" id="btn-exportar">Exportar para LEGAL (JSON)</button>
-          <button type="button" class="btn btn--secundario peligro" id="btn-limpiar">Eliminar registros locales</button>
-        </div>
+        <p class="ayuda" id="estado-sesion"></p>
       </fieldset>
 
       <div id="mensaje" class="aviso oculto" role="status"></div>
@@ -86,7 +70,6 @@
   </main>
 
   <script src="../shared/entorno.js"></script>
-  <script src="../shared/catalogo.js"></script>
   <script src="../shared/almacen.js"></script>
   <script src="../shared/servidor.js"></script>
   <script src="options.js"></script>

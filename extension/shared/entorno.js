@@ -1,11 +1,12 @@
 /*
  * LEGAL · Conector SGD — valores de entorno.
  *
- * Direcciones y valores fijados para la institución; el resto se configura
- * desde la página de Configuración. El entorno de prueba (LEGAL-Prueba.exe)
- * reemplaza este archivo para preconfigurar el SGD simulado y el servidor local.
+ * LEGAL.exe reemplaza este archivo al generar la extensión (carpeta de datos o
+ * /descargas/conector-sgd.zip) con la dirección del servidor de la intranet
+ * (LEGAL_URL_PUBLICA del .env) y las direcciones del SGD (LEGAL_SGD_URLS).
  */
 self.LEGAL_ENTORNO = {
   // SGD institucional de SEDAPAR (ver docs/11-reconocimiento-sgd.md)
-  urlsSgd: ['https://sgd.sedapar.com.pe/']
+  urlsSgd: ['https://sgd.sedapar.com.pe/'],
+  servidorLegal: ''
 };
