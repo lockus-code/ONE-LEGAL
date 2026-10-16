@@ -13,15 +13,16 @@ import (
 )
 
 var descripcionColecciones = map[string]string{
-	colUsuarios:    "Usuarios y roles",
-	colSesiones:    "Sesiones abiertas (portal y extensión)",
-	colPlantillas:  "Plantillas de tareas de cada profesional",
-	colProcesos:    "Procesos legales",
-	colTareas:      "Tareas (ciclo) de cada proceso",
-	colTramites:    "Trámites SGD indexados",
-	colSolicitudes: "Solicitudes de definición de plazo",
-	colAuditoria:   "Registro de auditoría",
-	colSistema:     "Taxonomía, configuración y contadores",
+	colUsuarios:       "Usuarios y roles",
+	colSesiones:       "Sesiones abiertas (portal y extensión)",
+	colPlantillas:     "Plantillas de tareas de cada profesional",
+	colProcesos:       "Procesos legales",
+	colTareas:         "Tareas (ciclo) de cada proceso",
+	colTramites:       "Trámites SGD indexados",
+	colSolicitudes:    "Solicitudes de definición de plazo",
+	colNotificaciones: "Avisos a la gerencia (retrocesos de tareas)",
+	colAuditoria:      "Registro de auditoría",
+	colSistema:        "Taxonomía, configuración y contadores",
 }
 
 func (s *Servidor) manejarAdminBD(w http.ResponseWriter, r *http.Request) {

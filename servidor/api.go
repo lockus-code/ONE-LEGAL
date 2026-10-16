@@ -76,6 +76,7 @@ func (s *Servidor) Rutas() http.Handler {
 
 	mux.HandleFunc("POST /api/solicitudes", s.con(s.manejarSolicitud, RolAsistente, RolGerente, RolAdmin))
 	mux.HandleFunc("PUT /api/solicitudes/{id}", s.con(s.manejarAtenderSolicitud))
+	mux.HandleFunc("POST /api/notificaciones/{id}/vista", s.con(s.manejarNotificacionVista, RolGerente, RolAdmin))
 
 	mux.HandleFunc("GET /api/admin/bd", s.con(s.manejarAdminBD, RolAdmin))
 	mux.HandleFunc("GET /api/admin/bd/{col}", s.con(s.manejarAdminColeccion, RolAdmin))
@@ -217,6 +218,7 @@ func (s *Servidor) manejarDatos(w http.ResponseWriter, r *http.Request) {
 	tareas, err3 := listar[Tarea](s.bd, colTareas)
 	tramites, err4 := listar[TramiteSGD](s.bd, colTramites)
 	solicitudes, err5 := listar[Solicitud](s.bd, colSolicitudes)
+	notificaciones, _ := listar[Notificacion](s.bd, colNotificaciones)
 	plantillas, err6 := listar[Plantilla](s.bd, colPlantillas)
 	if err := errors.Join(err1, err2, err3, err4, err5, err6); err != nil {
 		errorInterno(w, err)
@@ -259,7 +261,7 @@ func (s *Servidor) manejarDatos(w http.ResponseWriter, r *http.Request) {
 		"tareas":      tareas,
 		"tramites":    tramites,
 		"solicitudes": solicitudes,
-		"alertas":     calcularAlertas(u, procesos, tareas, tramites, solicitudes, usuarios, plantillas, cfg, cal),
+		"alertas":     calcularAlertas(u, procesos, tareas, tramites, solicitudes, usuarios, plantillas, notificaciones, cfg, cal),
 		"config":      cfg,
 		"feriados":    cal.Lista(),
 		"hoy":         hoy(),
@@ -853,9 +855,9 @@ func (s *Servidor) manejarTarea(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var sol struct {
 			entradaPlazo
-			Nombre      *string `json:"nombre"`
-			Descripcion *string `json:"descripcion"`
-			Estado      *string `json:"estado"`
+			Nombre        *string `json:"nombre"`
+			Descripcion   *string `json:"descripcion"`
+			Estado        *string `json:"estado"`
 			Notas         *string `json:"notas"`
 			Checklist     *[]Item `json:"checklist"`
 			Color         *string `json:"color"`
@@ -1272,6 +1274,23 @@ func (s *Servidor) manejarAtenderSolicitud(w http.ResponseWriter, r *http.Reques
 	x.Estado, x.AtendidaEn = "atendida", ahora()
 	s.bd.GuardarJSON(colSolicitudes, x.ID, x)
 	responder(w, http.StatusOK, map[string]any{"solicitud": x})
+}
+
+// manejarNotificacionVista: el gerente (o el administrador) marca un aviso como visto.
+func (s *Servidor) manejarNotificacionVista(w http.ResponseWriter, r *http.Request) {
+	u := usuarioDe(r)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := obtener[Notificacion](s.bd, colNotificaciones, r.PathValue("id"))
+	if err != nil {
+		rechazar(w, http.StatusNotFound, "El aviso no existe.")
+		return
+	}
+	if !contiene(n.VistaPor, u.ID) {
+		n.VistaPor = append(n.VistaPor, u.ID)
+		s.bd.GuardarJSON(colNotificaciones, n.ID, n)
+	}
+	responder(w, http.StatusOK, map[string]any{"notificacion": n})
 }
 
 // ------------------------------------------------------- SGD simulado

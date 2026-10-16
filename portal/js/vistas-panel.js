@@ -44,6 +44,7 @@
         <li><div class="lista__cuerpo">
           <div class="lista__titulo">${L.chipNivel(a.nivel)} ${esc(a.titulo)}</div>
           <div class="lista__meta">${esc(a.detalle)}</div></div>
+          ${a.notificacionId ? `<button type="button" class="enlace" data-visto="${esc(a.notificacionId)}" title="Marcar como visto">✓ Visto</button>` : ''}
           ${a.tareaId ? `<a class="enlace" href="#" data-abrir="${esc(a.tareaId)}">Abrir</a>` : a.procesoId ? `<a class="enlace" href="#proceso/${esc(a.procesoId)}">Ver</a>` : a.tipo.startsWith('plantilla') ? '<a class="enlace" href="#plantillas">Ver</a>' : ''}</li>`).join('')}</ul>
        ${alertas.length > max ? `<p><a href="#alertas" class="enlace">Ver las ${alertas.length} alertas</a></p>` : ''}`
     : '<p class="vacio">Sin alertas. ✓</p>';
@@ -186,7 +187,7 @@
     titulo: 'Alertas', subtitulo: 'Calculadas en el servidor con las reglas institucionales',
     render(v) {
       const filtro = L.vistas.alertas.filtro || '';
-      const tipos = { 'tarea-vencida': 'Tarea vencida', 'tarea-por-vencer': 'Tarea por vencer', 'plazo-no-definido': 'Plazo no definido', 'solicitud-plazo': 'Solicitud de plazo', 'sin-movimiento': 'Proceso sin movimiento', 'plantilla-por-aprobar': 'Plantilla por aprobar', 'plantilla-observada': 'Plantilla observada', 'listo-para-finalizar': 'Proceso sin tareas abiertas', 'tramite-nuevo': 'Nuevo documento SGD', 'carga-critica': 'Carga crítica' };
+      const tipos = { 'tarea-vencida': 'Tarea vencida', 'tarea-por-vencer': 'Tarea por vencer', 'plazo-no-definido': 'Plazo no definido', 'solicitud-plazo': 'Solicitud de plazo', 'sin-movimiento': 'Proceso sin movimiento', 'retroceso-tarea': 'Retroceso de tarea', 'plantilla-por-aprobar': 'Plantilla por aprobar', 'plantilla-observada': 'Plantilla observada', 'listo-para-finalizar': 'Proceso sin tareas abiertas', 'tramite-nuevo': 'Nuevo documento SGD', 'carga-critica': 'Carga crítica' };
       const lista = L.D.alertas.filter((a) => !filtro || a.tipo === filtro);
       const puedeSolicitar = L.es('asistente', 'gerente', 'admin');
       const pendiente = new Set(L.D.solicitudes.filter((s) => s.estado === 'pendiente').map((s) => s.tareaId));
@@ -201,10 +202,11 @@
             <td>${L.chipNivel(a.nivel)}</td>
             <td><strong>${esc(a.titulo)}</strong><div class="secundario">${esc(a.detalle)}</div></td>
             <td>${esc(L.nombre(a.profesionalId))}</td>
-            <td><select class="accion-alerta" data-proceso="${esc(a.procesoId || '')}" data-tarea="${esc(a.tareaId || '')}" aria-label="Acciones">
+            <td><select class="accion-alerta" data-proceso="${esc(a.procesoId || '')}" data-tarea="${esc(a.tareaId || '')}" data-notificacion="${esc(a.notificacionId || '')}" aria-label="Acciones">
               ${L.opciones([
                 ...(a.procesoId ? [['ver', 'Ver el proceso']] : []),
                 ...(a.tareaId ? [['tarea', 'Abrir la tarea']] : []),
+                ...(a.notificacionId ? [['visto', 'Marcar como visto']] : []),
                 ...(a.tipo.startsWith('plantilla') ? [['plantillas', a.tipo === 'plantilla-por-aprobar' ? 'Revisar la plantilla' : 'Corregir la plantilla']] : []),
                 ...(a.tipo === 'plazo-no-definido' && puedeSolicitar && !pendiente.has(a.tareaId) ? [['solicitar', 'Solicitar definición de plazo']] : []),
                 ...(['plazo-no-definido', 'solicitud-plazo'].includes(a.tipo) && L.es('profesional', 'admin') ? [['plazos', 'Definir el plazo']] : [])
@@ -220,9 +222,14 @@
         if (accion === 'plazos') location.hash = '#plazos';
         if (accion === 'plantillas') location.hash = '#plantillas';
         if (accion === 'tarea') L.abrirTarea(s.dataset.tarea);
+        if (accion === 'visto') L.marcarVisto(s.dataset.notificacion);
         if (accion === 'solicitar') L.solicitarPlazo(s.dataset.tarea);
       });
     }
+  };
+
+  L.marcarVisto = async function (id) {
+    try { await L.api('POST', `/api/notificaciones/${id}/vista`, {}); L.notificar('Aviso marcado como visto.'); await L.refrescar(); } catch (e) { L.error(e); }
   };
 
   L.solicitarPlazo = function (tareaId) {

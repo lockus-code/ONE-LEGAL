@@ -480,3 +480,4 @@ details.categoria .tabla-envoltura { padding: 0 18px 14px; }
 @media (max-width: 1100px) { .rejilla--3 { grid-template-columns: 1fr; } }
 .marca--clara .marca__logo { background: var(--institucional); color: #fff; }
 .ingreso__caja h2 { font-size: 18px; margin: 4px 0 0; }
+.lista li > .enlace, .lista li > button.enlace { white-space: nowrap; flex: none; }

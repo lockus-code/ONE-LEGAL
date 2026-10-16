@@ -16,25 +16,26 @@ import (
 )
 
 const (
-	colUsuarios    = "usuarios"
-	colSesiones    = "sesiones"
-	colPlantillas  = "plantillas"
-	colProcesos    = "procesos"
-	colTareas      = "tareas"
-	colTramites    = "tramites"
-	colSolicitudes = "solicitudes"
-	colAuditoria   = "auditoria"
-	colSistema     = "sistema" // taxonomía, configuración, contadores y metadatos
+	colUsuarios       = "usuarios"
+	colSesiones       = "sesiones"
+	colPlantillas     = "plantillas"
+	colProcesos       = "procesos"
+	colTareas         = "tareas"
+	colTramites       = "tramites"
+	colSolicitudes    = "solicitudes"
+	colAuditoria      = "auditoria"
+	colNotificaciones = "notificaciones"
+	colSistema        = "sistema" // taxonomía, configuración, contadores y metadatos
 
 	claveTaxonomia = "taxonomia"
 	claveConfig    = "configuracion"
 	claveCreada    = "creada_en"
 )
 
-var colecciones = []string{colUsuarios, colSesiones, colPlantillas, colProcesos, colTareas, colTramites, colSolicitudes, colAuditoria, colSistema}
+var colecciones = []string{colUsuarios, colSesiones, colPlantillas, colProcesos, colTareas, colTramites, colSolicitudes, colNotificaciones, colAuditoria, colSistema}
 
 // coleccionesOperativas: lo que se borra al «vaciar datos operativos».
-var coleccionesOperativas = []string{colProcesos, colTareas, colTramites, colSolicitudes, colAuditoria}
+var coleccionesOperativas = []string{colProcesos, colTareas, colTramites, colSolicitudes, colNotificaciones, colAuditoria}
 
 var errNoEncontrado = errors.New("no encontrado")
 

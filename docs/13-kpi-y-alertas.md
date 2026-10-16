@@ -62,6 +62,7 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 | Solicitud de plazo | Alta | El asistente o el gerente pidió definir el plazo; se atiende sola cuando el profesional lo define | Destinatario, remitente, gerente, administrador |
 | Proceso sin movimiento | Media | Sin cambios en tareas ni documentos SGD por ≥ M días (30 por defecto) | Profesional, asistente, gerente, administrador |
 | Carga crítica | Alta | Un profesional con ≥ U % de sus tareas abiertas vencidas (20 % por defecto) | Gerente, administrador |
+| Retroceso de tarea | Alta | Un profesional devolvió una tarea a una columna anterior; muestra la justificación. Permanece hasta que el gerente la marque como vista (*✓ Visto*) | Gerente, administrador |
 | Plantilla por aprobar | Media | Un profesional envió una versión nueva de su plantilla | Gerente, administrador |
 | Plantilla observada | Alta | La gerencia observó la plantilla (muestra la observación) | Profesional dueño |
 | Proceso sin tareas abiertas | Aviso | Proceso activo con todas sus tareas finalizadas | Ídem |

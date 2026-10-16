@@ -180,7 +180,12 @@
     $('#btn-menu').setAttribute('aria-expanded', lat.classList.contains('abierto'));
   });
   // Enlaces «Abrir» de tareas en cualquier vista.
-  document.addEventListener('click', (ev) => { const a = ev.target.closest('a[data-abrir]'); if (a) { ev.preventDefault(); L.abrirTarea(a.dataset.abrir); } });
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest('a[data-abrir]');
+    if (a) { ev.preventDefault(); L.abrirTarea(a.dataset.abrir); }
+    const v = ev.target.closest('[data-visto]');
+    if (v) L.marcarVisto(v.dataset.visto);
+  });
   $('#modal').addEventListener('click', (ev) => { if (ev.target.closest('[data-cerrar]') && !$('#modal').dataset.bloqueado) L.cerrarModal(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !$('#modal').hidden && !$('#modal').dataset.bloqueado && $('#confirmacion').hidden) L.cerrarModal(); });
 

@@ -233,6 +233,18 @@ type Solicitud struct {
 	AtendidaEn string `json:"atendidaEn,omitempty"`
 }
 
+// Notificacion: aviso persistente para la gerencia (p. ej. el retroceso de una tarea).
+type Notificacion struct {
+	ID        string   `json:"id"`
+	Tipo      string   `json:"tipo"` // retroceso-tarea
+	ProcesoID string   `json:"procesoId"`
+	TareaID   string   `json:"tareaId"`
+	De        string   `json:"de"` // usuario que la originó
+	Texto     string   `json:"texto"`
+	CreadaEn  string   `json:"creadaEn"`
+	VistaPor  []string `json:"vistaPor,omitempty"` // ids de usuarios que la marcaron como vista
+}
+
 type Configuracion struct {
 	DiasAlertaPorVencer int      `json:"diasAlertaPorVencer"` // días hábiles
 	DiasSinMovimiento   int      `json:"diasSinMovimiento"`

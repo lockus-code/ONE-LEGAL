@@ -70,7 +70,7 @@ Cada **profesional** define su plantilla de tareas por vía (puede partir de las
 
 - Columnas **Por hacer · En proceso · En revisión · Finalizada**; las fichas se **arrastran con el mouse**.
 - Solo se muestran las tareas **habilitadas**: sin antecesora o con la antecesora finalizada. El servidor rechaza avanzar una tarea cuya antecesora no finalizó.
-- **Retroceder** una ficha a una columna anterior pide una **justificación**, que queda en los comentarios y el historial.
+- **Retroceder** una ficha a una columna anterior pide una **justificación**, que queda en los comentarios y el historial, y **se notifica al gerente en su portal** (alerta «Retroceso de tarea» hasta que la marque como vista).
 - Al hacer clic se abre la **ficha de la tarea**: título y descripción editables, estado, fecha límite o plazo en días, **lista de verificación**, **color**, **comentarios**, historial, antecesora/sucesoras y documentos del SGD relacionados.
 - Cada ficha muestra su vencimiento (vencida, por vencer, vigente o por definir).
 

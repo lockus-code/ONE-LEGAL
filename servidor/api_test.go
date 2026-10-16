@@ -183,6 +183,28 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 	if cod, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso, "justificacion": "Falta adjuntar anexo", "color": "#d03b3b", "checklist": []map[string]any{{"texto": "Revisar anexos", "hecho": false}}}); cod != http.StatusOK || len(lista(r["tarea"].(map[string]any), "comentarios")) != 1 {
 		t.Fatalf("retroceso justificado: %d %v", cod, r)
 	}
+	// El retroceso llega como aviso a la gerencia hasta que lo marque como visto.
+	ger := admin.como(func() string { admin.crearUsuario("gerente1", RolGerente); return "gerente1" }(), "clave-gerente1")
+	_, dg := ger.llamar("GET", "/api/datos", nil)
+	var notID string
+	for _, a := range lista(dg, "alertas") {
+		if m := a.(map[string]any); m["tipo"] == "retroceso-tarea" {
+			notID, _ = m["notificacionId"].(string)
+		}
+	}
+	if notID == "" {
+		t.Fatalf("el gerente debía ver el retroceso: %v", lista(dg, "alertas"))
+	}
+	if cod, _ := prof.llamar("POST", "/api/notificaciones/"+notID+"/vista", map[string]any{}); cod != http.StatusForbidden {
+		t.Fatalf("el profesional no marca avisos de gerencia: %d", cod)
+	}
+	ger.llamar("POST", "/api/notificaciones/"+notID+"/vista", map[string]any{})
+	_, dg = ger.llamar("GET", "/api/datos", nil)
+	for _, a := range lista(dg, "alertas") {
+		if a.(map[string]any)["tipo"] == "retroceso-tarea" {
+			t.Fatal("el aviso visto no debía seguir apareciendo")
+		}
+	}
 
 	// Al finalizar la primera tarea, la audiencia (sin plazo) queda en proceso y se alerta.
 	if cod, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaFinalizada}); cod != http.StatusOK || len(lista(r, "sucesoras")) != 1 {

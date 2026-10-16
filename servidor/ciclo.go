@@ -135,6 +135,12 @@ func (s *Servidor) cambiarEstadoTarea(t *Tarea, estado, justificacion, usuario s
 	if retroceso {
 		texto = fmt.Sprintf("Retroceso: %s → %s. Justificación: %s", anterior, estado, justificacion)
 		t.Comentarios = append(t.Comentarios, Evento{Fecha: ahora(), Usuario: usuario, Texto: "↩ " + texto})
+		// La gerencia recibe un aviso en su portal hasta que lo marque como visto.
+		n := Notificacion{ID: nuevoID("NOT"), Tipo: "retroceso-tarea", ProcesoID: t.ProcesoID, TareaID: t.ID, De: usuario,
+			Texto: fmt.Sprintf("«%s» volvió de %s a %s. Justificación: %s", t.Nombre, anterior, estado, justificacion), CreadaEn: ahora()}
+		if err := s.bd.GuardarJSON(colNotificaciones, n.ID, n); err != nil {
+			return nil, err
+		}
 	}
 	t.Historial = append(t.Historial, Evento{Fecha: ahora(), Usuario: usuario, Texto: texto})
 	t.ActualizadaEn = ahora()
@@ -162,21 +168,22 @@ func (s *Servidor) cambiarEstadoTarea(t *Tarea, estado, justificacion, usuario s
 // ----------------------------------------------------------------- alertas
 
 type Alerta struct {
-	ID            string `json:"id"`
-	Tipo          string `json:"tipo"`
-	Nivel         string `json:"nivel"` // critica | alta | media | info
-	Titulo        string `json:"titulo"`
-	Detalle       string `json:"detalle"`
-	ProcesoID     string `json:"procesoId,omitempty"`
-	TareaID       string `json:"tareaId,omitempty"`
-	ProfesionalID string `json:"profesionalId,omitempty"`
-	Fecha         string `json:"fecha,omitempty"`
+	ID             string `json:"id"`
+	Tipo           string `json:"tipo"`
+	Nivel          string `json:"nivel"` // critica | alta | media | info
+	Titulo         string `json:"titulo"`
+	Detalle        string `json:"detalle"`
+	ProcesoID      string `json:"procesoId,omitempty"`
+	TareaID        string `json:"tareaId,omitempty"`
+	ProfesionalID  string `json:"profesionalId,omitempty"`
+	Fecha          string `json:"fecha,omitempty"`
+	NotificacionID string `json:"notificacionId,omitempty"`
 }
 
 var ordenNivel = map[string]int{"critica": 0, "alta": 1, "media": 2, "info": 3}
 
 // calcularAlertas evalúa las reglas de alerta sobre los datos visibles para el usuario.
-func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []TramiteSGD, solicitudes []Solicitud, usuarios []Usuario, plantillas []Plantilla, cfg Configuracion, cal Calendario) []Alerta {
+func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []TramiteSGD, solicitudes []Solicitud, usuarios []Usuario, plantillas []Plantilla, notificaciones []Notificacion, cfg Configuracion, cal Calendario) []Alerta {
 	hoyISO := hoy()
 	porProceso := map[string]*Proceso{}
 	for i := range procesos {
@@ -192,7 +199,7 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 	}
 	var alertas []Alerta
 	agregar := func(a Alerta) {
-		a.ID = a.Tipo + ":" + a.TareaID + a.ProcesoID + ":" + a.ProfesionalID + ":" + a.Titulo
+		a.ID = a.Tipo + ":" + a.NotificacionID + a.TareaID + a.ProcesoID + ":" + a.ProfesionalID + ":" + a.Titulo
 		alertas = append(alertas, a)
 	}
 	etiqueta := func(p *Proceso) string { return p.Codigo + " · " + p.Titulo }
@@ -319,6 +326,18 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 			}
 			agregar(Alerta{Tipo: "tramite-nuevo", Nivel: "info", ProcesoID: p.ID, TareaID: tr.TareaID, ProfesionalID: p.ProfesionalID, Fecha: tr.IndexadoEn,
 				Titulo: "Nuevo documento SGD " + tr.NroTramite, Detalle: etiqueta(p) + " · " + tr.AsuntoSGD})
+		}
+	}
+
+	// Retrocesos de tareas: aviso a la gerencia hasta que lo marque como visto.
+	if u.Rol == RolGerente || u.Rol == RolAdmin {
+		for _, n := range notificaciones {
+			p := porProceso[n.ProcesoID]
+			if n.Tipo != "retroceso-tarea" || p == nil || contiene(n.VistaPor, u.ID) {
+				continue
+			}
+			agregar(Alerta{Tipo: "retroceso-tarea", Nivel: "alta", ProcesoID: p.ID, TareaID: n.TareaID, ProfesionalID: p.ProfesionalID, Fecha: n.CreadaEn, NotificacionID: n.ID,
+				Titulo: "Retroceso de tarea en " + p.Codigo, Detalle: fmt.Sprintf("%s · %s · %s", n.Texto, n.De, n.CreadaEn[:10])})
 		}
 	}
 
