@@ -13,7 +13,7 @@
       ['Administración', [['usuarios', 'Usuarios'], ['taxonomia', 'Taxonomía de procesos'], ['bd', 'Base de datos'], ['config', 'Configuración'], ['extension', 'Extensión Conector SGD']]]
     ],
     gerente: [
-      ['Gerencia', [['panel', 'Panel institucional'], ['procesos', 'Cartera de procesos'], ['alertas', 'Alertas'], ['tramites', 'Trámites SGD']]]
+      ['Gerencia', [['panel', 'Panel institucional'], ['procesos', 'Cartera de procesos'], ['alertas', 'Alertas'], ['plantillas', 'Plantillas por aprobar'], ['tramites', 'Trámites SGD']]]
     ],
     profesional: [
       ['Mi trabajo', [['panel', 'Mi panel'], ['procesos', 'Mis procesos'], ['tareas', 'Mis tareas'], ['plazos', 'Plazos por definir'], ['alertas', 'Alertas']]],
@@ -87,7 +87,7 @@
   function pintarMenu() {
     const actual = L.ruta;
     const alertas = L.D.alertas.filter((a) => a.nivel !== 'info').length;
-    $('#menu').innerHTML = MENUS[L.rol()].map(([grupo, items]) => `<div class="menu__grupo">${esc(grupo)}</div>${items.map(([k, t]) => `<a href="#${k}" ${actual === k || (actual === 'proceso' && k === 'procesos') ? 'aria-current="page"' : ''}>${esc(t)}${k === 'alertas' && alertas ? ` <span class="cuenta">${alertas}</span>` : ''}${k === 'plazos' ? ` <span class="cuenta">${L.D.alertas.filter((a) => a.tipo === 'plazo-no-definido').length || ''}</span>` : ''}</a>`).join('')}`).join('');
+    $('#menu').innerHTML = MENUS[L.rol()].map(([grupo, items]) => `<div class="menu__grupo">${esc(grupo)}</div>${items.map(([k, t]) => `<a href="#${k}" ${actual === k || (actual === 'proceso' && k === 'procesos') ? 'aria-current="page"' : ''}>${esc(t)}${k === 'alertas' && alertas ? ` <span class="cuenta">${alertas}</span>` : ''}${k === 'plazos' && L.D.alertas.some((a) => a.tipo === 'plazo-no-definido') ? ` <span class="cuenta">${L.D.alertas.filter((a) => a.tipo === 'plazo-no-definido').length}</span>` : ''}${k === 'plantillas' && L.es('gerente', 'admin') && L.D.plantillas.some((x) => x.estado === 'pendiente') ? ` <span class="cuenta">${L.D.plantillas.filter((x) => x.estado === 'pendiente').length}</span>` : ''}</a>`).join('')}`).join('');
     const u = L.yo();
     $('#usuario-nombre').textContent = u.nombre;
     $('#usuario-rol').textContent = L.ROLES[u.rol];
@@ -115,6 +115,7 @@
     anterior.replaceWith(nuevo);
     L.editando = false;
     await vista.render(nuevo);
+    L.rotularTablas(nuevo);
   };
 
   L.refrescar = async function () {
@@ -159,8 +160,16 @@
 
   // ---------------------------------------------------------------- eventos
   window.addEventListener('hashchange', () => { L.cerrarModal(); L.refrescar().catch(() => L.pintar()); window.scrollTo(0, 0); $('#lateral').classList.remove('abierto'); });
-  $('#accion-cuenta').addEventListener('change', (ev) => {
-    const a = ev.target.value; ev.target.value = '';
+  // Menú de la cuenta.
+  const menuCuenta = $('#menu-cuenta');
+  const alternarMenu = (abrir) => { menuCuenta.hidden = !abrir; $('#btn-cuenta').setAttribute('aria-expanded', abrir); if (abrir) menuCuenta.querySelector('button').focus(); };
+  $('#btn-cuenta').addEventListener('click', (ev) => { ev.stopPropagation(); alternarMenu(menuCuenta.hidden); });
+  document.addEventListener('click', (ev) => { if (!ev.target.closest('.cuenta-menu')) alternarMenu(false); });
+  menuCuenta.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { alternarMenu(false); $('#btn-cuenta').focus(); } });
+  menuCuenta.addEventListener('click', (ev) => {
+    const a = ev.target.dataset.cuenta;
+    if (!a) return;
+    alternarMenu(false);
     if (a === 'clave') cambiarClave(false);
     if (a === 'extension') location.hash = '#extension';
     if (a === 'salir') salir();
@@ -170,6 +179,8 @@
     lat.classList.toggle('abierto');
     $('#btn-menu').setAttribute('aria-expanded', lat.classList.contains('abierto'));
   });
+  // Enlaces «Abrir» de tareas en cualquier vista.
+  document.addEventListener('click', (ev) => { const a = ev.target.closest('a[data-abrir]'); if (a) { ev.preventDefault(); L.abrirTarea(a.dataset.abrir); } });
   $('#modal').addEventListener('click', (ev) => { if (ev.target.closest('[data-cerrar]') && !$('#modal').dataset.bloqueado) L.cerrarModal(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !$('#modal').hidden && !$('#modal').dataset.bloqueado && $('#confirmacion').hidden) L.cerrarModal(); });
 

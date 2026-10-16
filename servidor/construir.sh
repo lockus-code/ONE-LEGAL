@@ -3,7 +3,7 @@
 # SGD simulado embebidos. Requiere Go 1.24+.
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.1.0}"
 
 rm -rf web && mkdir -p web dist
 cp -r ../portal web/portal

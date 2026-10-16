@@ -100,6 +100,9 @@
   L.nombreCategoria = (codigo) => (L.categorias().find((c) => c.codigo === codigo) || {}).nombre || codigo;
   L.nombreVia = (codigo) => (L.buscarVia(codigo).v || {}).nombre || codigo;
   L.plantillaDe = (profId, via) => L.D.plantillas.find((p) => p.profesionalId === profId && p.via === via);
+  /** Plantilla con versión aprobada (la única que genera ciclos). */
+  L.plantillaAprobada = (profId, via) => L.D.plantillas.find((p) => p.profesionalId === profId && p.via === via && (p.tareasAprobadas || []).length);
+  L.aprobadasDe = (profId) => L.D.plantillas.filter((p) => p.profesionalId === profId && (p.tareasAprobadas || []).length);
   L.tareasDe = (pid) => (L.D.tareasPor[pid] || []).slice().sort((a, b) => a.orden - b.orden);
   L.tramitesDe = (pid) => L.D.tramitesPor[pid] || [];
   L.yo = () => L.D.usuario;
@@ -108,6 +111,13 @@
   L.puedeEditarTareas = (p) => p && p.estado !== 'Finalizado' && (L.es('admin') || (L.es('profesional') && p.profesionalId === L.yo().id));
   L.abierta = (t) => t.estado !== 'Finalizada';
 
+  /** Barra de avance con el porcentaje a su lado. */
+  L.avanceHtml = (frac, texto) => `<span class="avance"><span class="progreso"><span style="width:${Math.round(frac * 100)}%"></span></span><span class="avance__pct">${texto ?? L.pct(frac)}</span></span>`;
+  /** Rotula cada celda con su encabezado para la vista de tablas en celular. */
+  L.rotularTablas = (raiz) => L.$$('table.tabla', raiz).forEach((tabla) => {
+    const titulos = L.$$('thead th', tabla).map((th) => th.textContent.trim());
+    L.$$('tbody tr', tabla).forEach((tr) => Array.from(tr.children).forEach((td, i) => { if (titulos[i] && !td.hasAttribute('colspan')) td.dataset.label = titulos[i]; }));
+  });
   L.avance = function (pid) {
     const ts = L.tareasDe(pid);
     return ts.length ? ts.filter((t) => !L.abierta(t)).length / ts.length : 0;
@@ -120,7 +130,7 @@
       return { tipo: 'cumplida', texto: 'Finalizada' };
     }
     if (!t.fechaLimite) {
-      if (t.plazoDias !== null && t.plazoDias !== undefined) return { tipo: 'relativo', texto: `${t.plazoDias} días ${t.tipoDias === 'calendario' ? 'calendario' : 'hábiles'} al iniciar` };
+      if (t.plazoDias !== null && t.plazoDias !== undefined) return { tipo: 'relativo', texto: `${t.plazoDias} días ${t.tipoDias === 'calendario' ? 'cal.' : 'háb.'} al habilitarse` };
       return { tipo: 'sin-plazo', texto: 'Plazo por definir' };
     }
     const h = L.habilesHasta(t.fechaLimite);
@@ -131,6 +141,8 @@
   };
 
   // ============================================================ chips
+  /** Estado de la tarea como se ve en el tablero (Pendiente → Por hacer / Bloqueada). */
+  L.estadoTarea = (t) => (t.estado === 'Pendiente' ? (L.habilitada && !L.habilitada(t) ? 'Bloqueada' : 'Por hacer') : t.estado);
   L.chipEstado = (estado) => `<span class="chip chip--estado-${L.slug(estado)}">${L.esc(estado)}</span>`;
   L.chipVence = function (t) {
     const v = L.vencimiento(t);
@@ -172,16 +184,25 @@
   };
 
   /** Abre un modal. `html` incluye cabecera y cuerpo; devuelve el contenedor. */
-  L.modal = function (html, { angosto = false } = {}) {
+  L.modal = function (html, { angosto = false, foco = true } = {}) {
     const m = L.$('#modal');
     L.$('.modal__caja', m).classList.toggle('modal__caja--angosta', angosto);
     L.$('#modal-contenido').innerHTML = html;
     m.hidden = false;
-    const primero = L.$('#modal-contenido input, #modal-contenido select, #modal-contenido textarea');
-    if (primero) primero.focus();
+    L.rotularTablas(L.$('#modal-contenido'));
+    const primero = foco ? L.$('#modal-contenido input, #modal-contenido select, #modal-contenido textarea') : L.$('#modal-contenido [data-cerrar]');
+    if (primero) primero.focus({ preventScroll: true });
     return L.$('#modal-contenido');
   };
-  L.cerrarModal = () => { L.$('#modal').hidden = true; L.$('#modal-contenido').innerHTML = ''; };
+  L.cerrarModal = () => {
+    const m = L.$('#modal');
+    if (m.hidden) return;
+    m.hidden = true;
+    L.$('#modal-contenido').innerHTML = '';
+    const cb = L.alCerrarModal;
+    L.alCerrarModal = null;
+    if (cb) cb();
+  };
   L.cabModal = (titulo, sub) => `<div class="modal__cab"><div>${sub ? `<div class="modal__clave">${sub}</div>` : ''}<h2 id="modal-titulo">${titulo}</h2></div><button type="button" class="btn-icono" data-cerrar aria-label="Cerrar">✕</button></div>`;
 
   L.opciones = (lista, actual, vacio) => `${vacio !== undefined ? `<option value="">${L.esc(vacio)}</option>` : ''}${lista.map(([v, t]) => `<option value="${L.esc(v)}" ${String(v) === String(actual ?? '') ? 'selected' : ''}>${L.esc(t)}</option>`).join('')}`;
@@ -231,56 +252,54 @@
   L.redondear = (n, d = 1) => (n === null ? '—' : Number(n.toFixed(d)).toLocaleString('es-PE'));
 
   /**
-   * Selector en cascada para asignar un proceso nuevo.
-   * criterio 'profesional': Profesional → Vía (agrupada por categoría; primero las vías con plantilla).
-   * criterio 'categoria':   Categoría → Vía → Profesional (marca quién tiene plantilla).
+   * Selector en cascada para asignar un proceso nuevo. Solo ofrece vías con plantilla APROBADA.
+   * criterio 'profesional': Profesional → Vía (agrupadas por categoría).
+   * criterio 'categoria':   Categoría → Vía → Profesional.
+   * Un profesional solo puede asignarse procesos a sí mismo.
    */
   L.cascadaProceso = function (raiz, estadoInicial = {}) {
-    const st = { criterio: estadoInicial.criterio || 'profesional', profesionalId: estadoInicial.profesionalId || '', categoria: '', via: '' };
-    if (L.es('profesional')) { st.profesionalId = L.yo().id; }
+    const soloYo = L.es('profesional');
+    const st = { criterio: estadoInicial.criterio || 'profesional', profesionalId: soloYo ? L.yo().id : (estadoInicial.profesionalId || ''), categoria: '', via: '' };
+    const conPlantilla = () => L.profesionales().filter((p) => L.aprobadasDe(p.id).length && (!soloYo || p.id === L.yo().id));
     function pintar() {
-      const profs = L.profesionales();
-      const soloYo = L.es('profesional');
+      const profs = conPlantilla();
       let html = '';
-      if (!soloYo) {
-        html += `<label>Elegir primero<select data-c="criterio">${L.opciones([['profesional', 'El profesional (luego sus vías)'], ['categoria', 'La categoría y la vía (luego el profesional)']], st.criterio)}</select></label>`;
+      if (!profs.length) {
+        raiz.innerHTML = `<div class="aviso aviso--alerta"><span>${soloYo ? 'Aún no tiene plantillas aprobadas. Cree su plantilla en <a href="#plantillas">Mis plantillas</a> y espere la aprobación de la gerencia.' : 'Ningún profesional tiene plantillas aprobadas. Los profesionales las registran y la gerencia las aprueba en <a href="#plantillas">Plantillas</a>.'}</span></div>`;
+        return;
       }
+      if (!soloYo) html += `<label>Elegir primero<select data-c="criterio">${L.opciones([['profesional', 'El profesional (luego sus vías)'], ['categoria', 'La categoría y la vía (luego el profesional)']], st.criterio)}</select></label>`;
       const selProf = (lista, vacio) => `<label>Profesional a cargo<select data-c="profesionalId" ${soloYo ? 'disabled' : ''}>${L.opciones(lista, st.profesionalId, vacio)}</select></label>`;
       if (st.criterio === 'profesional' || soloYo) {
-        html += selProf(profs.map((p) => { const n = L.D.plantillas.filter((x) => x.profesionalId === p.id).length; return [p.id, `${p.nombre}${n ? ` · ${n} plantilla(s)` : ''}`]; }), profs.length ? 'Seleccione el profesional…' : 'No hay profesionales: créelos en Usuarios');
-        const propias = L.D.plantillas.filter((x) => x.profesionalId === st.profesionalId);
-        const conPlt = new Set(propias.map((x) => x.via));
-        const grupos = [];
-        if (propias.length) grupos.push({ grupo: 'Con plantilla del profesional', opciones: propias.map((x) => [x.via, `${L.nombreCategoria(x.categoria)} › ${L.nombreVia(x.via)}`]) });
-        L.categorias().forEach((c) => grupos.push({ grupo: c.nombre, opciones: L.viasActivas(c).filter((v) => !conPlt.has(v.codigo)).map((v) => [v.codigo, v.nombre]) }));
-        html += `<label>Vía procedimental<select data-c="via" ${st.profesionalId ? '' : 'disabled'}>${L.grupos(st.profesionalId ? grupos : [], st.via, st.profesionalId ? 'Seleccione la vía…' : 'Primero elija el profesional')}</select></label>`;
+        html += selProf(profs.map((p) => [p.id, `${p.nombre} · ${L.aprobadasDe(p.id).length} plantilla(s) aprobada(s)`]), soloYo ? undefined : 'Seleccione el profesional…');
+        const grupos = new Map();
+        L.aprobadasDe(st.profesionalId).forEach((x) => { const g = L.nombreCategoria(x.categoria); if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push([x.via, L.nombreVia(x.via)]); });
+        html += `<label>Vía procedimental<select data-c="via" ${st.profesionalId ? '' : 'disabled'}>${L.grupos([...grupos.entries()].map(([grupo, opciones]) => ({ grupo, opciones })), st.via, st.profesionalId ? 'Seleccione la vía…' : 'Primero elija el profesional')}</select></label>`;
       } else {
-        html += `<label>Categoría<select data-c="categoria">${L.opciones(L.categorias().map((c) => [c.codigo, c.nombre]), st.categoria, 'Seleccione la categoría…')}</select></label>`;
+        const vias = new Set(profs.flatMap((p) => L.aprobadasDe(p.id).map((x) => x.via)));
+        html += `<label>Categoría<select data-c="categoria">${L.opciones(L.categorias().filter((c) => c.vias.some((v) => vias.has(v.codigo))).map((c) => [c.codigo, c.nombre]), st.categoria, 'Seleccione la categoría…')}</select></label>`;
         const c = L.categorias().find((x) => x.codigo === st.categoria);
-        html += `<label>Vía procedimental<select data-c="via" ${c ? '' : 'disabled'}>${L.opciones(c ? L.viasActivas(c).map((v) => [v.codigo, v.nombre]) : [], st.via, c ? 'Seleccione la vía…' : 'Primero elija la categoría')}</select></label>`;
-        const ordenados = [...profs].sort((a, b) => Number(Boolean(L.plantillaDe(b.id, st.via))) - Number(Boolean(L.plantillaDe(a.id, st.via))));
-        html += selProf(st.via ? ordenados.map((p) => [p.id, `${p.nombre} · ${L.plantillaDe(p.id, st.via) ? '✓ con plantilla' : 'ciclo base'}`]) : [], st.via ? 'Seleccione el profesional…' : 'Primero elija la vía');
+        html += `<label>Vía procedimental<select data-c="via" ${c ? '' : 'disabled'}>${L.opciones(c ? L.viasActivas(c).filter((v) => vias.has(v.codigo)).map((v) => [v.codigo, v.nombre]) : [], st.via, c ? 'Seleccione la vía…' : 'Primero elija la categoría')}</select></label>`;
+        html += selProf(st.via ? profs.filter((p) => L.plantillaAprobada(p.id, st.via)).map((p) => [p.id, p.nombre]) : [], st.via ? 'Seleccione el profesional…' : 'Primero elija la vía');
       }
-      html += `<div class="ciclo-previo" data-c="previo">${previo()}</div>`;
+      html += `<div class="ciclo-previo">${previo()}</div>`;
       raiz.innerHTML = html;
     }
     function previo() {
-      if (!st.via || !st.profesionalId) return '';
-      const pl = L.plantillaDe(st.profesionalId, st.via);
-      const { v } = L.buscarVia(st.via);
-      const etapas = pl ? pl.tareas : (v ? v.etapas : []);
+      const pl = st.via && st.profesionalId && L.plantillaAprobada(st.profesionalId, st.via);
+      if (!pl) return '';
       const plazo = (e) => (e.plazoDias === null || e.plazoDias === undefined ? 'por definir' : `${e.plazoDias} d. ${e.tipoDias === 'calendario' ? 'cal.' : 'háb.'}${e.desde === 'inicio' ? ' desde el inicio' : ''}`);
-      return `<p class="secundario">${pl ? `Ciclo según la plantilla <strong>${L.esc(pl.nombre)}</strong> de ${L.esc(L.nombre(st.profesionalId))}:` : `${L.esc(L.nombre(st.profesionalId))} no tiene plantilla para esta vía; se usarán las <strong>etapas normativas base</strong>:`}</p>
-        <ol class="ciclo-lista">${etapas.map((e) => `<li>${L.esc(e.nombre)} <span class="secundario">· ${plazo(e)}</span></li>`).join('')}</ol>`;
+      return `<p class="secundario">Ciclo que se generará (plantilla aprobada <strong>${L.esc(pl.nombreAprobado || pl.nombre)}</strong>):</p>
+        <ol class="ciclo-lista">${pl.tareasAprobadas.map((e) => `<li>${L.esc(e.nombre)} <span class="secundario">· ${plazo(e)}</span></li>`).join('')}</ol>`;
     }
     raiz.addEventListener('change', (ev) => {
       const c = ev.target.dataset.c;
       if (!c) return;
       st[c] = ev.target.value;
-      if (c === 'criterio') { st.via = ''; st.categoria = ''; if (!L.es('profesional')) st.profesionalId = ''; }
-      if (c === 'categoria') st.via = '';
+      if (c === 'criterio') { st.via = ''; st.categoria = ''; if (!soloYo) st.profesionalId = ''; }
+      if (c === 'categoria') { st.via = ''; st.profesionalId = ''; }
       if (c === 'profesionalId' && st.criterio === 'profesional') st.via = '';
-      if (c === 'via' && st.via) st.categoria = (L.buscarVia(st.via).c || {}).codigo || '';
+      if (c === 'via' && st.criterio === 'categoria') st.profesionalId = '';
       pintar();
     });
     pintar();

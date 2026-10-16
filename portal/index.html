@@ -17,6 +17,7 @@
         <span class="marca__logo" aria-hidden="true">L</span>
         <div><strong>LEGAL</strong><span>Gestión de Procesos Legales</span></div>
       </div>
+      <h2>Ingresar</h2>
       <label>Usuario<input name="usuario" autocomplete="username" required autofocus></label>
       <label>Contraseña<input name="clave" type="password" autocomplete="current-password" required></label>
       <p id="ingreso-mensaje" class="aviso aviso--alerta" hidden></p>
@@ -49,20 +50,19 @@
         </div>
         <div class="perfil">
           <a href="#alertas" class="campana" id="campana" title="Alertas"><span aria-hidden="true">🔔</span><span class="campana__n" id="campana-n">0</span><span class="sr">alertas</span></a>
-          <div class="perfil__rol">
-            <strong id="usuario-nombre"></strong>
-            <span id="usuario-rol"></span>
+          <div class="cuenta-menu">
+            <button type="button" class="cuenta-menu__boton" id="btn-cuenta" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-cuenta">
+              <span class="avatar" id="avatar" aria-hidden="true"></span>
+              <span class="perfil__rol"><strong id="usuario-nombre"></strong><span id="usuario-rol"></span></span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            <div class="cuenta-menu__lista" id="menu-cuenta" role="menu" hidden>
+              <button type="button" role="menuitem" data-cuenta="clave">Cambiar contraseña</button>
+              <button type="button" role="menuitem" data-cuenta="extension">Instalar la extensión Conector SGD</button>
+              <hr>
+              <button type="button" role="menuitem" data-cuenta="salir">Cerrar sesión</button>
+            </div>
           </div>
-          <label class="perfil__menu">
-            <span class="sr">Cuenta</span>
-            <select id="accion-cuenta" aria-label="Opciones de la cuenta">
-              <option value="">Cuenta ▾</option>
-              <option value="clave">Cambiar contraseña</option>
-              <option value="extension">Instalar la extensión</option>
-              <option value="salir">Cerrar sesión</option>
-            </select>
-          </label>
-          <span class="avatar" id="avatar" aria-hidden="true"></span>
         </div>
       </header>
       <main id="vista" class="vista" tabindex="-1"></main>
@@ -93,6 +93,7 @@
   <script src="js/nucleo.js"></script>
   <script src="js/vistas-panel.js"></script>
   <script src="js/vistas-procesos.js"></script>
+  <script src="js/tareas.js"></script>
   <script src="js/vistas-plantillas.js"></script>
   <script src="js/vistas-admin.js"></script>
   <script src="js/app.js"></script>

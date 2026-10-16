@@ -35,8 +35,7 @@
       cicloMedio: L.promedio(ciclo),
       resolucionMedia: L.promedio(resolucion),
       oportunidadMediana: L.mediana(oportunidad),
-      tramites30: tramites.filter((t) => L.diasEntre(t.indexadoEn.slice(0, 10), L.hoy()) <= 30),
-      cicloBase: activos.filter((p) => p.cicloBase)
+      tramites30: tramites.filter((t) => L.diasEntre(t.indexadoEn.slice(0, 10), L.hoy()) <= 30)
     };
   };
 
@@ -45,7 +44,7 @@
         <li><div class="lista__cuerpo">
           <div class="lista__titulo">${L.chipNivel(a.nivel)} ${esc(a.titulo)}</div>
           <div class="lista__meta">${esc(a.detalle)}</div></div>
-          ${a.procesoId ? `<a class="enlace" href="#proceso/${esc(a.procesoId)}">Ver</a>` : ''}</li>`).join('')}</ul>
+          ${a.tareaId ? `<a class="enlace" href="#" data-abrir="${esc(a.tareaId)}">Abrir</a>` : a.procesoId ? `<a class="enlace" href="#proceso/${esc(a.procesoId)}">Ver</a>` : a.tipo.startsWith('plantilla') ? '<a class="enlace" href="#plantillas">Ver</a>' : ''}</li>`).join('')}</ul>
        ${alertas.length > max ? `<p><a href="#alertas" class="enlace">Ver las ${alertas.length} alertas</a></p>` : ''}`
     : '<p class="vacio">Sin alertas. ✓</p>';
 
@@ -76,7 +75,7 @@
     const procs = L.D.procesos.filter((p) => !filtro || p.categoria === filtro);
     const k = L.indicadores(procs);
     const porCategoria = L.categorias().map((c) => ({ etiqueta: c.nombre, valor: k.activos.filter((p) => p.categoria === c.codigo).length }))
-      .filter((i) => i.valor || !filtro).sort((a, b) => b.valor - a.valor);
+      .filter((i) => i.valor).sort((a, b) => b.valor - a.valor);
     const viasCuenta = {};
     k.activos.forEach((p) => { viasCuenta[p.via] = (viasCuenta[p.via] || 0) + 1; });
     const porVia = Object.entries(viasCuenta).map(([via, n]) => ({ etiqueta: L.nombreVia(via), valor: n, detalle: `${n} proceso(s) · ${L.nombreCategoria((L.buscarVia(via).c || {}).codigo)}` })).sort((a, b) => b.valor - a.valor).slice(0, 8);
@@ -100,26 +99,26 @@
         ${L.kpi('Plazos por definir', k.sinPlazo.length, 'Tareas cuya antecesora avanzó sin fecha límite', k.sinPlazo.length ? 'kpi--critico' : '')}
         ${L.kpi('Trámites SGD indexados', k.tramites30.length, `Últimos 30 días · oportunidad ${k.oportunidadMediana === null ? '—' : `${L.redondear(k.oportunidadMediana, 0)} d (mediana)`}`, '', 'Oportunidad: días entre el ingreso del trámite al SGD y su indexación en LEGAL (mediana).')}
       </div>
-      <div class="rejilla rejilla--2">
-        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Procesos activos por categoría</h2><p>Según la taxonomía normativa</p></div></div>${L.barrasH(porCategoria, { unidad: 'procesos activos' })}</section>
-        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Procesos activos por vía procedimental</h2><p>Las 8 vías con más procesos</p></div></div>${L.barrasH(porVia, { unidad: 'procesos' })}</section>
-      </div>
-      <div class="rejilla rejilla--3-1">
+      <div class="rejilla">
         <section class="tarjeta">
-          <div class="tarjeta__cab"><div><h2>Carga y desempeño por profesional</h2><p>Procesos activos, tareas abiertas y cumplimiento</p></div></div>
+          <div class="tarjeta__cab"><div><h2>Carga y desempeño por profesional</h2><p>Procesos activos, tareas abiertas y cumplimiento de plazos</p></div></div>
           <div class="tabla-envoltura"><table class="tabla">
-            <thead><tr><th>Profesional</th><th class="num">Activos</th><th>Tareas abiertas</th><th class="num">Vencidas</th><th class="num">Por definir</th><th class="num">Cumplimiento</th><th class="num">Resolución media</th></tr></thead>
+            <thead><tr><th>Profesional</th><th class="num">Activos</th><th>Tareas abiertas</th><th class="num">Vencidas</th><th class="num">Por definir</th><th class="num">Cumplimiento</th><th class="num">Resolución</th></tr></thead>
             <tbody>${filas.length ? filas.map(({ u, k: x }) => `<tr>
-              <td><strong>${esc(u.nombre)}</strong>${u.activo ? '' : ' <span class="chip">Inactivo</span>'}<div class="secundario">${esc(u.cargo || '')}</div></td>
+              <td><strong>${esc(u.nombre)}</strong>${u.activo ? '' : ' <span class="chip">Inactivo</span>'}${u.cargo ? `<div class="secundario">${esc(u.cargo)}</div>` : ''}</td>
               <td class="num">${x.activos.length}</td>
-              <td><div class="progreso" title="${x.abiertas.length} tareas abiertas"><span style="width:${(x.abiertas.length / maxAb) * 100}%"></span></div> ${x.abiertas.length}</td>
+              <td>${L.avanceHtml(x.abiertas.length / maxAb, x.abiertas.length)}</td>
               <td class="num">${x.vencidas.length ? `<span class="chip chip--critico">${x.vencidas.length}</span>` : 0}</td>
               <td class="num">${x.sinPlazo.length ? `<span class="chip chip--advertencia">${x.sinPlazo.length}</span>` : 0}</td>
               <td class="num">${L.pct(x.cumplimiento)}</td>
-              <td class="num">${x.resolucionMedia === null ? '—' : `${L.redondear(x.resolucionMedia)} d`}</td></tr>`).join('') : '<tr><td colspan="7" class="vacio">No hay profesionales registrados.</td></tr>'}</tbody>
+              <td class="num nowrap">${x.resolucionMedia === null ? '—' : `${L.redondear(x.resolucionMedia)} d`}</td></tr>`).join('') : '<tr><td colspan="7" class="vacio">No hay profesionales registrados.</td></tr>'}</tbody>
           </table></div>
         </section>
-        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Alertas</h2><p>Críticas, altas y medias</p></div></div>${alertasLista(alertas)}</section>
+      </div>
+      <div class="rejilla rejilla--3">
+        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Alertas</h2><p>Críticas, altas y medias</p></div>${alertas.length ? `<a class="btn btn--sm" href="#alertas">Ver todas (${alertas.length})</a>` : ''}</div>${alertasLista(alertas, 6)}</section>
+        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Procesos activos por categoría</h2><p>Según la taxonomía normativa</p></div></div>${L.barrasH(porCategoria, { unidad: 'procesos activos' })}</section>
+        <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Procesos activos por vía procedimental</h2><p>Las 8 vías con más procesos</p></div></div>${L.barrasH(porVia, { unidad: 'procesos' })}</section>
       </div>
       <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Trámites SGD indexados por semana</h2><p>Últimas 8 semanas</p></div></div>${L.columnas(L.serieSemanal(k.tramites.map((t) => t.indexadoEn)))}</section>`;
     L.$('#f-categoria', v).addEventListener('change', (ev) => { L.vistas.panel.filtro = ev.target.value; L.pintar(); });
@@ -140,14 +139,14 @@
       </div>
       <div class="rejilla rejilla--3-1">
         <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Próximos vencimientos</h2><p>Tareas abiertas por fecha límite</p></div><a class="btn btn--sm" href="#tareas">Mis tareas</a></div>
-          ${prioridades.length ? `<ul class="lista">${prioridades.map((t) => { const p = L.D.porProceso[t.procesoId]; return `<li><div class="lista__cuerpo"><div class="lista__titulo">${esc(t.nombre)}</div><div class="lista__meta">${esc(p.codigo)} · ${esc(p.titulo)}</div></div>${L.chipVence(t)} <a class="enlace" href="#proceso/${esc(p.id)}">Ver</a></li>`; }).join('')}</ul>` : '<p class="vacio">No hay tareas con fecha límite.</p>'}
+          ${prioridades.length ? `<ul class="lista">${prioridades.map((t) => { const p = L.D.porProceso[t.procesoId]; return `<li><div class="lista__cuerpo"><div class="lista__titulo">${esc(t.nombre)}</div><div class="lista__meta">${esc(p.codigo)} · ${esc(p.titulo)}</div></div>${L.chipPlazo(t)} <a class="enlace" href="#" data-abrir="${esc(t.id)}">Abrir</a></li>`; }).join('')}</ul>` : '<p class="vacio">No hay tareas con fecha límite.</p>'}
         </section>
         <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Alertas</h2><p>Lo que requiere su acción</p></div></div>${alertasLista(L.D.alertas)}</section>
       </div>
       <section class="tarjeta"><div class="tarjeta__cab"><div><h2>Avance de mis procesos activos</h2><p>Tareas finalizadas sobre el total del ciclo</p></div></div>
-        ${k.activos.length ? `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Proceso</th><th>Vía</th><th>Avance</th><th>Tarea en curso</th></tr></thead><tbody>${k.activos.map((p) => {
-          const actual = L.tareasDe(p.id).find((t) => t.estado === 'En proceso');
-          return `<tr><td><a href="#proceso/${esc(p.id)}"><strong>${esc(p.codigo)}</strong></a> ${esc(p.titulo)}</td><td>${esc(L.nombreVia(p.via))}</td><td><div class="progreso"><span style="width:${L.avance(p.id) * 100}%"></span></div> ${L.pct(L.avance(p.id))}</td><td>${actual ? `${esc(actual.nombre)} ${L.chipVence(actual)}` : '—'}</td></tr>`;
+        ${k.activos.length ? `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Proceso</th><th>Vía</th><th>Avance</th><th>Tarea actual</th></tr></thead><tbody>${k.activos.map((p) => {
+          const actual = L.tareasDe(p.id).find((t) => t.estado === 'En proceso' || t.estado === 'En revisión') || L.tareasDe(p.id).find((t) => L.abierta(t) && L.habilitada(t));
+          return `<tr><td><a href="#proceso/${esc(p.id)}"><strong>${esc(p.codigo)}</strong></a> ${esc(p.titulo)}</td><td>${esc(L.nombreVia(p.via))}</td><td>${L.avanceHtml(L.avance(p.id))}</td><td>${actual ? `<a href="#" data-abrir="${esc(actual.id)}">${esc(actual.nombre)}</a> ${L.chipEstado(L.estadoTarea(actual))} ${L.chipPlazo(actual)}` : '—'}</td></tr>`;
         }).join('')}</tbody></table></div>` : '<p class="vacio">Sin procesos activos.</p>'}
       </section>`;
   }
@@ -163,12 +162,12 @@
     const solicitudes = L.D.solicitudes.filter((s) => s.de === L.yo().id && s.estado === 'pendiente');
     const sinTarea = mios.filter((t) => t.accion === 'existente' && !t.tareaId).length;
     const existentes = mios.filter((t) => t.accion === 'existente').length;
-    const alertas = L.D.alertas.filter((a) => ['plazo-no-definido', 'solicitud-plazo', 'tarea-vencida', 'sin-plantilla'].includes(a.tipo));
+    const alertas = L.D.alertas.filter((a) => ['plazo-no-definido', 'solicitud-plazo', 'tarea-vencida', 'tarea-por-vencer'].includes(a.tipo));
     v.innerHTML = `${cartaVacia()}
       <div class="rejilla rejilla--kpi">
         ${L.kpi('Indexados hoy', mios.filter((t) => dias(t) === 0).length, `${mios.filter((t) => dias(t) <= 6).length} en los últimos 7 días`)}
         ${L.kpi('Indexados en 30 días', mios.filter((t) => dias(t) <= 30).length, `${L.D.tramites.filter((t) => dias(t) <= 30).length} en toda la gerencia`)}
-        ${L.kpi('Procesos creados este mes', misProcesos.length, `${k.cicloBase.length} activo(s) con ciclo base (sin plantilla)`)}
+        ${L.kpi('Procesos creados este mes', misProcesos.length, `${new Set(L.D.plantillas.filter((x) => (x.tareasAprobadas || []).length).map((x) => x.via)).size} vía(s) con plantilla aprobada`)}
         ${L.kpi('Oportunidad de indexación', oportunidad === null ? '—' : `${L.redondear(oportunidad, 0)} d`, 'Mediana: ingreso al SGD → indexación. Meta: ≤ 1 día', oportunidad !== null && oportunidad > 2 ? 'kpi--critico' : '')}
         ${L.kpi('Solicitudes de plazo pendientes', solicitudes.length, `${k.sinPlazo.length} tarea(s) con plazo por definir`, '', 'Solicitudes enviadas a profesionales que aún no definen el plazo')}
         ${L.kpi('Anexos sin tarea relacionada', existentes ? L.pct(sinTarea / existentes) : '—', `${sinTarea} de ${existentes} documentos anexados`, '', 'Relacionar el documento con su tarea ayuda al profesional a ubicarlo')}
@@ -187,7 +186,7 @@
     titulo: 'Alertas', subtitulo: 'Calculadas en el servidor con las reglas institucionales',
     render(v) {
       const filtro = L.vistas.alertas.filtro || '';
-      const tipos = { 'tarea-vencida': 'Tarea vencida', 'tarea-por-vencer': 'Tarea por vencer', 'plazo-no-definido': 'Plazo no definido', 'solicitud-plazo': 'Solicitud de plazo', 'sin-movimiento': 'Proceso sin movimiento', 'sin-plantilla': 'Ciclo base sin plantilla', 'listo-para-finalizar': 'Proceso sin tareas abiertas', 'tramite-nuevo': 'Nuevo documento SGD', 'carga-critica': 'Carga crítica' };
+      const tipos = { 'tarea-vencida': 'Tarea vencida', 'tarea-por-vencer': 'Tarea por vencer', 'plazo-no-definido': 'Plazo no definido', 'solicitud-plazo': 'Solicitud de plazo', 'sin-movimiento': 'Proceso sin movimiento', 'plantilla-por-aprobar': 'Plantilla por aprobar', 'plantilla-observada': 'Plantilla observada', 'listo-para-finalizar': 'Proceso sin tareas abiertas', 'tramite-nuevo': 'Nuevo documento SGD', 'carga-critica': 'Carga crítica' };
       const lista = L.D.alertas.filter((a) => !filtro || a.tipo === filtro);
       const puedeSolicitar = L.es('asistente', 'gerente', 'admin');
       const pendiente = new Set(L.D.solicitudes.filter((s) => s.estado === 'pendiente').map((s) => s.tareaId));
@@ -205,6 +204,8 @@
             <td><select class="accion-alerta" data-proceso="${esc(a.procesoId || '')}" data-tarea="${esc(a.tareaId || '')}" aria-label="Acciones">
               ${L.opciones([
                 ...(a.procesoId ? [['ver', 'Ver el proceso']] : []),
+                ...(a.tareaId ? [['tarea', 'Abrir la tarea']] : []),
+                ...(a.tipo.startsWith('plantilla') ? [['plantillas', a.tipo === 'plantilla-por-aprobar' ? 'Revisar la plantilla' : 'Corregir la plantilla']] : []),
                 ...(a.tipo === 'plazo-no-definido' && puedeSolicitar && !pendiente.has(a.tareaId) ? [['solicitar', 'Solicitar definición de plazo']] : []),
                 ...(['plazo-no-definido', 'solicitud-plazo'].includes(a.tipo) && L.es('profesional', 'admin') ? [['plazos', 'Definir el plazo']] : [])
               ], '', 'Acciones…')}</select></td></tr>`).join('')}</tbody></table></div>` : '<p class="vacio">No hay alertas. ✓</p>'}
@@ -217,6 +218,8 @@
         s.value = '';
         if (accion === 'ver') location.hash = `#proceso/${s.dataset.proceso}`;
         if (accion === 'plazos') location.hash = '#plazos';
+        if (accion === 'plantillas') location.hash = '#plantillas';
+        if (accion === 'tarea') L.abrirTarea(s.dataset.tarea);
         if (accion === 'solicitar') L.solicitarPlazo(s.dataset.tarea);
       });
     }

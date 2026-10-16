@@ -9,7 +9,8 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 | Tarea abierta | Tarea en estado *Pendiente* o *En proceso* de un proceso *Activo*. |
 | Tarea vencida | Tarea abierta con fecha límite anterior a hoy. |
 | Por vencer | Tarea abierta que vence dentro de N días hábiles (N = «Aviso por vencer», 3 por defecto). |
-| Plazo por definir | Tarea abierta sin fecha límite ni plazo relativo, cuya antecesora está *En proceso* o *Finalizada* (o que ya inició). |
+| Tarea habilitada | Tarea sin antecesora o cuya antecesora finalizó; es la única que aparece en el tablero y la única que puede avanzar. |
+| Plazo por definir | Tarea abierta sin fecha límite ni plazo relativo, cuya antecesora está *En proceso*, *En revisión* o *Finalizada* (o que ya está habilitada). |
 | Cumplimiento de plazos | Tareas finalizadas en o antes de su fecha límite ÷ tareas finalizadas que tenían fecha límite (año en curso). |
 | Oportunidad de indexación | Días entre la fecha de ingreso del trámite al SGD y su indexación en LEGAL (mediana). |
 | Días hábiles | Lunes a viernes, sin feriados nacionales del Perú (incluidos Jueves y Viernes Santo) ni los días no laborables registrados por el administrador. Un plazo en días calendario que vence en día inhábil se corre al siguiente hábil. |
@@ -46,7 +47,7 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 |---|---|---|
 | Indexados hoy / 7 días | Trámites que indexó | — |
 | Indexados en 30 días | Propios y de toda la gerencia | — |
-| Procesos creados en el mes · con ciclo base | Procesos que registró; procesos activos sin plantilla del profesional | Ciclo base → 0 |
+| Procesos creados en el mes | Procesos que registró; vías con plantilla aprobada disponibles | — |
 | Oportunidad de indexación | Mediana de días ingreso SGD → indexación (propios) | ≤ 1 día (alerta visual > 2) |
 | Solicitudes de plazo pendientes | Solicitudes enviadas que el profesional aún no atiende | 0 |
 | Anexos sin tarea relacionada | Documentos anexados sin tarea ÷ documentos anexados | Bajo |
@@ -61,13 +62,14 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 | Solicitud de plazo | Alta | El asistente o el gerente pidió definir el plazo; se atiende sola cuando el profesional lo define | Destinatario, remitente, gerente, administrador |
 | Proceso sin movimiento | Media | Sin cambios en tareas ni documentos SGD por ≥ M días (30 por defecto) | Profesional, asistente, gerente, administrador |
 | Carga crítica | Alta | Un profesional con ≥ U % de sus tareas abiertas vencidas (20 % por defecto) | Gerente, administrador |
-| Ciclo generado con etapas base | Aviso | El profesional no tenía plantilla para la vía al crearse el proceso | Todos los que ven el proceso |
+| Plantilla por aprobar | Media | Un profesional envió una versión nueva de su plantilla | Gerente, administrador |
+| Plantilla observada | Alta | La gerencia observó la plantilla (muestra la observación) | Profesional dueño |
 | Proceso sin tareas abiertas | Aviso | Proceso activo con todas sus tareas finalizadas | Ídem |
 | Nuevo documento SGD | Aviso | Un tercero anexó un trámite a un proceso del profesional (últimos 3 días) | Profesional |
 
 ## Plazos que se definen sobre la marcha
 
 1. Cada tarea de la plantilla tiene plazo fijo (N días hábiles o calendario, contados desde el inicio del proceso o desde que concluye la antecesora) o queda **por definir**.
-2. Al finalizar una tarea, sus sucesoras pasan a *En proceso* y, si tienen plazo relativo, LEGAL calcula su fecha límite.
+2. Al finalizar una tarea, sus sucesoras quedan **habilitadas** (*Por hacer*) desde esa fecha y, si tienen plazo relativo, LEGAL calcula su fecha límite.
 3. Si la sucesora no tiene plazo, se genera la alerta «plazo no definido». El profesional la resuelve en **Plazos por definir**, donde puede escribir varias fechas exactas o plazos en días y guardarlas de una vez, o desde la tabla del proceso.
 4. El asistente o el gerente pueden **solicitar la definición del plazo**; la solicitud se cierra sola cuando el profesional lo define.

@@ -52,8 +52,8 @@ Si el equipo cambia de IP, edite `LEGAL_URL_PUBLICA`, reinicie LEGAL (ícono ›
 | Rol | Puede |
 |---|---|
 | **Administrador** | Todo lo anterior más: usuarios y roles, taxonomía (categorías, vías y etapas base), configuración de alertas y feriados, y la **base de datos**: explorar colecciones, editar o eliminar documentos JSON, descargar/restaurar respaldos, **vaciar datos operativos** o **vaciar todo** (confirmando con «VACIAR»). |
-| **Gerente** | Panel institucional con KPI, carga por profesional, cartera completa, alertas, reasignar procesos, solicitar plazos. |
-| **Profesional** | Sus procesos y tareas: cambiar estados, **definir plazos** (uno a uno o en bloque), agregar tareas, finalizar procesos; **sus plantillas** de tareas por vía. |
+| **Gerente** | Panel institucional con KPI, carga por profesional, cartera completa, alertas, **aprobar u observar plantillas**, reasignar procesos, solicitar plazos. |
+| **Profesional** | Sus procesos y **tablero de tareas** (arrastrar entre columnas, ficha con detalle, checklist, color y comentarios), **definir plazos** (uno a uno o en bloque), finalizar procesos; **sus plantillas** de tareas por vía (enviadas a aprobación). |
 | **Asistente administrativo** | Indexar trámites desde el SGD con la extensión, registrar procesos, ver la cartera, **solicitar la definición de plazos**. |
 
 Los KPI y las reglas de alerta están en [`docs/13-kpi-y-alertas.md`](docs/13-kpi-y-alertas.md).
@@ -62,7 +62,17 @@ Los KPI y las reglas de alerta están en [`docs/13-kpi-y-alertas.md`](docs/13-kp
 
 La elección del proceso sigue la jerarquía normativa peruana: **Categoría** (Civil, Penal, Laboral, Contencioso administrativo, Constitucional, Arbitraje y medios alternativos, Administrativo, Ejecución coactiva, Asesoría consultiva) → **Vía procedimental** (p. ej. Civil › Conocimiento, Abreviado, Sumarísimo, Cautelar, Único de ejecución, No contencioso) → **Profesional**. Cada vía trae sus etapas normativas base con plazos referenciales (CPC, NCPP, NLPT, TUO Ley 27584, Nuevo Código Procesal Constitucional, D. Leg. 1071, TUO Ley 27444, Ley 30057, TUO Ley 26979). El administrador puede editarlas.
 
-Cada **profesional** define su plantilla de tareas por vía (puede partir de las etapas base). Cada tarea tiene plazo fijo (días hábiles o calendario, desde el inicio del proceso o desde que concluye la antecesora) o queda **por definir**. Al crear un proceso, LEGAL genera el ciclo con la plantilla del profesional asignado; si no tiene, usa las etapas base y lo avisa.
+Cada **profesional** define su plantilla de tareas por vía (puede partir de las etapas base). Cada tarea tiene plazo fijo (días hábiles o calendario, desde el inicio del proceso o desde que concluye la antecesora) o queda **por definir**.
+
+**Aprobación:** cada versión que guarda el profesional queda *por aprobar*; la gerencia (o el administrador) la **aprueba** o la **observa** con un comentario. Solo las vías con plantilla aprobada se ofrecen para crear procesos (portal y extensión), y el ciclo se genera con la última versión aprobada aunque haya una nueva en revisión.
+
+## Tablero de tareas (profesional)
+
+- Columnas **Por hacer · En proceso · En revisión · Finalizada**; las fichas se **arrastran con el mouse**.
+- Solo se muestran las tareas **habilitadas**: sin antecesora o con la antecesora finalizada. El servidor rechaza avanzar una tarea cuya antecesora no finalizó.
+- **Retroceder** una ficha a una columna anterior pide una **justificación**, que queda en los comentarios y el historial.
+- Al hacer clic se abre la **ficha de la tarea**: título y descripción editables, estado, fecha límite o plazo en días, **lista de verificación**, **color**, **comentarios**, historial, antecesora/sucesoras y documentos del SGD relacionados.
+- Cada ficha muestra su vencimiento (vencida, por vencer, vigente o por definir).
 
 ## 4. Extensión Conector SGD
 
@@ -71,10 +81,11 @@ Cada **profesional** define su plantilla de tareas por vía (puede partir de las
 **Uso:** abrir el detalle de un trámite en el SGD (con sesión iniciada) y pulsar el ícono LEGAL. En el panel lateral:
 
 1. Ingresar con el usuario del portal (una vez por semana).
-2. **Trámite del SGD**: n.º de trámite, ID interno, **asunto** (leído del SGD y corregible), fecha de ingreso y enlace directo.
+2. **Trámite del SGD**: n.º de trámite, ID interno, **asunto** (leído del SGD — en SEDAPAR, el `<p class="text-muted">` que sigue al rótulo ASUNTO — y corregible), **fecha de ingreso** (será la fecha de inicio del proceso) y enlace directo.
 3. **¿Qué desea hacer?** (desplegable):
-   - *Crear un proceso nuevo* → **Elegir primero**: *el profesional* (Profesional → Vía, agrupadas por categoría y primero las que tienen su plantilla) o *la categoría* (Categoría → Vía → Profesional, marcando quién tiene plantilla). Muestra qué ciclo se generará. **No se pide correlativo**: el código `PL-AAAA-NNNN` lo asigna LEGAL.
-   - *Anexar a un proceso existente* → **Buscar por**: *profesional* o *categoría y vía*; el desplegable de procesos se agrupa por Categoría › Vía y excluye los finalizados. Opcional: **tarea relacionada**.
+   - *Crear un proceso nuevo* → **Elegir primero**: *el profesional* (Profesional → Vía, agrupadas por categoría) o *la categoría* (Categoría → Vía → Profesional). **Solo aparecen vías con plantilla aprobada.** Muestra qué ciclo se generará. **No se pide correlativo**: el código `PL-AAAA-NNNN` lo asigna LEGAL.
+   - *Anexar a un proceso existente* → **Buscar por**: *profesional* o *categoría y vía*; el desplegable de procesos se agrupa por Categoría › Vía, muestra su fecha de inicio y excluye los finalizados. Opcional: **tarea relacionada**.
+   - Si quien ingresa es un **profesional**, solo se ve a sí mismo y solo ve sus propios procesos.
 4. **Detalle de la indexación** (opcional): un asunto propio, distinto del asunto del trámite.
 5. **Indexar en LEGAL**. Se guarda en la base de datos del servidor y aparece en el portal (proceso, Trámites SGD, paneles) en segundos.
 
@@ -84,7 +95,7 @@ La pestaña **Mis indexaciones** lista lo registrado, con un desplegable de acci
 
 Con `LEGAL_SGD_SIMULADO=si`, `http://<servidor>:8790/sgd-simulado/` reproduce las rutas del SGD de SEDAPAR con 5 trámites ficticios (acepta cualquier usuario). La extensión descargada ya lo incluye entre los SGD habilitados.
 
-Recorrido sugerido con la BD vacía: `admin` crea un profesional, un asistente y un gerente → el profesional crea su plantilla (p. ej. Contencioso administrativo › Proceso ordinario) → el asistente indexa el trámite 2026-00871-12 como proceso nuevo y anexa el 2026-01234-3 → el profesional finaliza la primera tarea y define en *Plazos por definir* el plazo que quedó pendiente → el gerente revisa el panel institucional.
+Recorrido sugerido con la BD vacía: `admin` crea un profesional, un asistente y un gerente → el profesional crea su plantilla (p. ej. Contencioso administrativo › Proceso ordinario) → el gerente la aprueba → el asistente indexa el trámite 2026-00871-12 como proceso nuevo y anexa el 2026-01234-3 → el profesional mueve la primera tarea en *Mis tareas* hasta *Finalizada* y define en *Plazos por definir* el plazo que quedó pendiente → el gerente revisa el panel institucional.
 
 ## 6. Construir
 

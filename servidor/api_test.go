@@ -110,6 +110,7 @@ func TestBaseDeDatosIniciaVacia(t *testing.T) {
 func TestFlujoCompletoDeIndexacion(t *testing.T) {
 	_, admin := entorno(t)
 	profID := admin.crearUsuario("mquispe", RolProfesional)
+	admin.crearUsuario("otroprof", RolProfesional)
 	admin.crearUsuario("asistente1", RolAsistente)
 	prof := admin.como("mquispe", "clave-mquispe")
 	asis := admin.como("asistente1", "clave-asistente1")
@@ -122,18 +123,29 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 		{"nombre": "Audiencia", "plazoDias": nil},
 		{"nombre": "Alegatos", "plazoDias": 5},
 	}}
-	if cod, r := prof.llamar("POST", "/api/plantillas", plantilla); cod != http.StatusCreated {
+	cod, r := prof.llamar("POST", "/api/plantillas", plantilla)
+	if cod != http.StatusCreated {
 		t.Fatalf("alta de plantilla: %d %v", cod, r)
 	}
+	pltID := r["plantilla"].(map[string]any)["id"].(string)
 	if cod, _ := prof.llamar("POST", "/api/plantillas", plantilla); cod != http.StatusConflict {
 		t.Fatalf("no debía permitir dos plantillas para la misma vía: %d", cod)
 	}
+	// Sin aprobación no se puede crear el proceso ni aparece en el Conector.
+	nuevo := map[string]any{"accion": "nuevo", "tramite": tramiteSGD("2026-01234-3"), "detalle": "Cédula de notificación",
+		"proceso": map[string]any{"categoria": "CAD", "via": "CAD-ORD", "profesionalId": profID}}
+	if cod, _ := asis.llamar("POST", "/api/indexar", nuevo); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("sin plantilla aprobada no debía crearse el proceso: %d", cod)
+	}
+	if cod, _ := prof.llamar("POST", "/api/plantillas/"+pltID+"/revision", map[string]any{"decision": "aprobar"}); cod != http.StatusForbidden {
+		t.Fatalf("el profesional no debía aprobar su propia plantilla: %d", cod)
+	}
+	if cod, r := admin.llamar("POST", "/api/plantillas/"+pltID+"/revision", map[string]any{"decision": "aprobar"}); cod != http.StatusOK {
+		t.Fatalf("aprobación: %d %v", cod, r)
+	}
 
 	// El asistente indexa un trámite como proceso nuevo: sin correlativo, por categoría → vía → profesional.
-	cod, r := asis.llamar("POST", "/api/indexar", map[string]any{
-		"accion": "nuevo", "tramite": tramiteSGD("2026-01234-3"), "detalle": "Cédula de notificación",
-		"proceso": map[string]any{"categoria": "CAD", "via": "CAD-ORD", "profesionalId": profID},
-	})
+	cod, r = asis.llamar("POST", "/api/indexar", nuevo)
 	if cod != http.StatusCreated {
 		t.Fatalf("indexar nuevo: %d %v", cod, r)
 	}
@@ -145,6 +157,9 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 		t.Fatalf("debían generarse 3 tareas de la plantilla: %v", r["tareasGeneradas"])
 	}
 	procID := proc["id"].(string)
+	if proc["fechaInicio"] != "2026-10-10" {
+		t.Fatalf("el proceso debía iniciar en la fecha de ingreso al SGD: %v", proc["fechaInicio"])
+	}
 
 	// Lo indexado es visible en el portal del profesional.
 	_, d := prof.llamar("GET", "/api/datos", nil)
@@ -153,8 +168,20 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 	}
 	tareas := lista(d, "tareas")
 	t1, t2, t3 := tareas[0].(map[string]any), tareas[1].(map[string]any), tareas[2].(map[string]any)
-	if t1["estado"] != TareaEnProceso || t1["fechaLimite"] == nil || t1["fechaLimite"] == "" {
-		t.Fatalf("la primera tarea debía iniciar con fecha límite: %v", t1)
+	if t1["estado"] != TareaPendiente || t1["fechaInicio"] == nil || t1["fechaLimite"] == nil || t1["fechaLimite"] == "" {
+		t.Fatalf("la primera tarea debía quedar disponible con fecha límite: %v", t1)
+	}
+	// No se avanza una tarea cuya antecesora no finalizó.
+	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t2["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusConflict {
+		t.Fatalf("debía exigir que la antecesora finalice: %d", cod)
+	}
+	// Retroceder exige justificación.
+	prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnRevision})
+	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("el retroceso sin justificación debía rechazarse: %d", cod)
+	}
+	if cod, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso, "justificacion": "Falta adjuntar anexo", "color": "#d03b3b", "checklist": []map[string]any{{"texto": "Revisar anexos", "hecho": false}}}); cod != http.StatusOK || len(lista(r["tarea"].(map[string]any), "comentarios")) != 1 {
+		t.Fatalf("retroceso justificado: %d %v", cod, r)
 	}
 
 	// Al finalizar la primera tarea, la audiencia (sin plazo) queda en proceso y se alerta.
@@ -209,20 +236,36 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 		t.Fatalf("un proceso finalizado no debía admitir trámites: %d", cod)
 	}
 	_, cat := asis.llamar("GET", "/api/catalogo", nil)
-	if len(lista(cat, "procesos")) != 0 || len(lista(cat, "profesionales")) != 1 {
+	if len(lista(cat, "procesos")) != 0 || len(lista(cat, "profesionales")) != 2 {
 		t.Fatalf("el catálogo del Conector debía excluir finalizados: %v", cat["procesos"])
+	}
+	_, cat = prof.llamar("GET", "/api/catalogo", nil)
+	if len(lista(cat, "profesionales")) != 1 {
+		t.Fatalf("el profesional solo debía verse a sí mismo: %v", cat["profesionales"])
 	}
 }
 
-func TestCicloBaseSinPlantilla(t *testing.T) {
+func TestProcesoExigePlantillaAprobada(t *testing.T) {
 	_, admin := entorno(t)
 	profID := admin.crearUsuario("jsalazar", RolProfesional)
-	cod, r := admin.llamar("POST", "/api/procesos", map[string]any{"titulo": "Demanda de obligación de dar suma de dinero", "categoria": "CIV", "via": "CIV-CON", "profesionalId": profID})
-	if cod != http.StatusCreated {
-		t.Fatalf("alta de proceso: %d %v", cod, r)
+	base := map[string]any{"titulo": "Demanda de obligación de dar suma de dinero", "categoria": "CIV", "via": "CIV-CON", "profesionalId": profID}
+	if cod, _ := admin.llamar("POST", "/api/procesos", base); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("sin plantilla aprobada debía rechazarse: %d", cod)
 	}
-	if r["proceso"].(map[string]any)["cicloBase"] != true || len(lista(r, "tareas")) != 7 {
-		t.Fatalf("sin plantilla debía usar las 7 etapas del proceso de conocimiento: %v", r["proceso"])
+	cod, r := admin.llamar("POST", "/api/plantillas", map[string]any{"profesionalId": profID, "categoria": "CIV", "via": "CIV-CON", "tareas": []map[string]any{{"nombre": "Contestar", "plazoDias": 30}, {"nombre": "Audiencia"}}})
+	if cod != http.StatusCreated {
+		t.Fatalf("plantilla: %d %v", cod, r)
+	}
+	id := r["plantilla"].(map[string]any)["id"].(string)
+	admin.llamar("POST", "/api/plantillas/"+id+"/revision", map[string]any{"decision": "aprobar"})
+	// Una nueva versión queda pendiente, pero los procesos siguen usando la aprobada.
+	admin.llamar("PUT", "/api/plantillas/"+id, map[string]any{"categoria": "CIV", "via": "CIV-CON", "tareas": []map[string]any{{"nombre": "Solo una"}}})
+	cod, r = admin.llamar("POST", "/api/procesos", base)
+	if cod != http.StatusCreated || len(lista(r, "tareas")) != 2 {
+		t.Fatalf("debía usar la versión aprobada (2 tareas): %d %v", cod, r)
+	}
+	if cod, _ := admin.llamar("POST", "/api/plantillas/"+id+"/revision", map[string]any{"decision": "observar"}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("observar exige texto: %d", cod)
 	}
 	if cod, _ := admin.llamar("POST", "/api/procesos", map[string]any{"titulo": "X", "categoria": "CIV", "via": "PEN-COM", "profesionalId": profID}); cod != http.StatusUnprocessableEntity {
 		t.Fatalf("la vía debía pertenecer a la categoría: %d", cod)

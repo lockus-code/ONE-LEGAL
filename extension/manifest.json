@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LEGAL · Conector SGD",
   "short_name": "LEGAL SGD",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lee el trámite del SGD (solo lectura) y lo indexa en LEGAL como proceso nuevo o existente, desde el panel lateral de Chrome.",
   "minimum_chrome_version": "116",
   "permissions": [

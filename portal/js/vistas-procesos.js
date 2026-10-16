@@ -23,14 +23,14 @@
       const alertasPor = {};
       L.D.alertas.forEach((a) => { if (a.procesoId && a.nivel !== 'info') alertasPor[a.procesoId] = (alertasPor[a.procesoId] || 0) + 1; });
       v.innerHTML = `
+        <div class="barra-acciones"><span class="secundario">${lista.length} de ${L.D.procesos.length} proceso(s)</span>
+          ${L.es('asistente', 'profesional', 'admin') ? '<button class="btn btn--primario" id="btn-nuevo">+ Registrar proceso</button>' : ''}</div>
         <div class="barra-filtros">
           <label>Buscar<input type="search" id="f-texto" value="${esc(f.texto)}" placeholder="Código, título, expediente…"></label>
           <label>Categoría<select id="f-categoria">${L.opciones(L.categorias().map((c) => [c.codigo, c.nombre]), f.categoria, 'Todas')}</select></label>
           <label>Vía<select id="f-via" ${cat ? '' : 'disabled'}>${L.opciones(cat ? cat.vias.map((x) => [x.codigo, x.nombre]) : [], f.via, 'Todas')}</select></label>
           ${L.es('profesional') ? '' : `<label>Profesional<select id="f-profesional">${L.opciones(L.profesionales(false).map((u) => [u.id, u.nombre]), f.profesional, 'Todos')}</select></label>`}
           <label>Estado<select id="f-estado">${L.opciones([['abiertos', 'Activos y suspendidos'], ['Activo', 'Activos'], ['Suspendido', 'Suspendidos'], ['Finalizado', 'Finalizados'], ['todos', 'Todos']], f.estado)}</select></label>
-          <span class="espacio"></span>
-          ${L.es('asistente', 'profesional', 'admin') ? '<button class="btn btn--primario" id="btn-nuevo">+ Registrar proceso</button>' : ''}
         </div>
         <section class="tarjeta">${lista.length ? `<div class="tabla-envoltura"><table class="tabla">
           <thead><tr><th>Código</th><th>Proceso</th><th>Categoría › Vía</th>${L.es('profesional') ? '' : '<th>Profesional</th>'}<th>Estado</th><th>Avance</th><th>Próximo vencimiento</th><th class="num">Docs SGD</th></tr></thead>
@@ -42,7 +42,7 @@
               <td>${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))}</td>
               ${L.es('profesional') ? '' : `<td>${esc(L.nombre(p.profesionalId))}</td>`}
               <td>${L.chipEstado(p.estado)}</td>
-              <td><div class="progreso"><span style="width:${L.avance(p.id) * 100}%"></span></div> ${L.pct(L.avance(p.id))}</td>
+              <td>${L.avanceHtml(L.avance(p.id))}</td>
               <td>${prox ? `${esc(prox.nombre)}<br>${L.chipVence(prox)}` : '<span class="secundario">—</span>'}</td>
               <td class="num">${L.tramitesDe(p.id).length}</td></tr>`;
           }).join('')}</tbody></table></div>` : `<p class="vacio">${L.D.procesos.length ? 'No hay procesos con estos filtros.' : 'Aún no hay procesos. Se crean al indexar un trámite del SGD como «proceso nuevo» o con «Registrar proceso».'}</p>`}
@@ -71,6 +71,7 @@
         <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Registrar y generar ciclo</button></div>
       </form>`);
     const cascada = L.cascadaProceso(L.$('#cascada', c));
+    if (!L.$('#cascada select', c)) L.$('#f-proc button.btn--primario', c).disabled = true;
     L.$('#f-proc', c).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.target;
@@ -111,39 +112,33 @@
       v.innerHTML = `
         <p><a href="#procesos" class="enlace">← Procesos</a></p>
         <section class="tarjeta">
-          <div class="tarjeta__cab"><div><h2>${esc(p.titulo)}</h2><p>${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))}</p></div>
+          <div class="tarjeta__cab"><div><h2>Datos del proceso</h2><p>${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))}</p></div>
             <div class="acciones-cab">${L.chipEstado(p.estado)}<select id="accion-proceso" aria-label="Acciones del proceso">${L.opciones(acciones, '', 'Acciones…')}</select></div></div>
           <div class="campos campos--rejilla">
             <div><span class="secundario">Profesional a cargo</span><div class="valor">${esc(L.nombre(p.profesionalId))}</div></div>
             <div><span class="secundario">Inicio</span><div class="valor">${L.fmtFecha(p.fechaInicio)}${p.fechaFin ? ` · fin ${L.fmtFecha(p.fechaFin)}` : ''}</div></div>
             <div><span class="secundario">Origen</span><div class="valor">${p.origen === 'SGD' ? 'Indexado desde el SGD' : 'Registrado en el portal'} por ${esc(p.creadoPor)}</div></div>
-            <div><span class="secundario">Ciclo</span><div class="valor">${esc(p.plantillaNombre || '—')}${p.cicloBase ? ' <span class="chip chip--advertencia">Sin plantilla propia</span>' : ''}</div></div>
+            <div><span class="secundario">Ciclo (plantilla)</span><div class="valor">${esc(p.plantillaNombre || '—')}</div></div>
             ${p.expedienteJudicial ? `<div><span class="secundario">Expediente</span><div class="valor mono">${esc(p.expedienteJudicial)}</div></div>` : ''}
             ${p.organo ? `<div><span class="secundario">Órgano</span><div class="valor">${esc(p.organo)}</div></div>` : ''}
             ${p.contraparte ? `<div><span class="secundario">Contraparte</span><div class="valor">${esc(p.contraparte)}</div></div>` : ''}
-            <div><span class="secundario">Avance</span><div class="valor"><div class="progreso"><span style="width:${L.avance(p.id) * 100}%"></span></div> ${L.pct(L.avance(p.id))}</div></div>
+            <div><span class="secundario">Avance</span><div class="valor">${L.avanceHtml(L.avance(p.id))}</div></div>
           </div>
           ${p.observaciones ? `<p class="secundario">${esc(p.observaciones)}</p>` : ''}
         </section>
 
         <section class="tarjeta">
-          <div class="tarjeta__cab"><div><h2>Ciclo de tareas</h2><p>${editable ? 'Cambie el estado y los plazos directamente en la tabla. Al finalizar una tarea, sus sucesoras inician y su plazo empieza a correr.' : 'Solo el profesional a cargo actualiza las tareas.'}</p></div>
+          <div class="tarjeta__cab"><div><h2>Ciclo de tareas</h2><p>${editable ? 'Haga clic en una tarea para ver su detalle, cambiar su estado, plazo, color o lista de verificación. También puede moverlas en <a href="#tareas">Mis tareas</a>.' : 'Haga clic en una tarea para ver su detalle. Solo el profesional a cargo la actualiza.'}</p></div>
             ${editable ? '<button class="btn btn--sm" id="btn-tarea">+ Agregar tarea</button>' : ''}</div>
           <div class="tabla-envoltura"><table class="tabla tabla--tareas">
-            <thead><tr><th>#</th><th>Tarea</th><th>Estado</th><th>Inicio</th><th>Plazo</th><th>Situación</th><th></th></tr></thead>
-            <tbody>${tareas.map((t) => `<tr data-tarea="${esc(t.id)}">
-              <td class="num">${t.orden}</td>
-              <td><strong>${esc(t.nombre)}</strong>${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}${t.antecesoraId ? `<div class="secundario">Después de: ${esc(nombreTarea(t.antecesoraId) || '—')}</div>` : ''}${t.notas ? `<div class="nota">${esc(t.notas)}</div>` : ''}</td>
-              <td>${editable ? `<select data-campo="estado" aria-label="Estado">${L.opciones([['Pendiente', 'Pendiente'], ['En proceso', 'En proceso'], ['Finalizada', 'Finalizada']], t.estado)}</select>` : L.chipEstado(t.estado)}</td>
+            <thead><tr><th class="num">#</th><th>Tarea</th><th>Estado</th><th>Habilitada</th><th>Plazo</th><th>Detalle</th></tr></thead>
+            <tbody>${tareas.map((t) => { const items = t.checklist || []; return `<tr class="fila-enlace ${L.habilitada(t) ? '' : 'fila-bloqueada'}" data-tarea="${esc(t.id)}" tabindex="0">
+              <td class="num"><span class="punto-color" style="--c:${esc(t.color || 'var(--borde-fuerte)')}"></span>${t.orden}</td>
+              <td><strong>${esc(t.nombre)}</strong>${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}${!L.habilitada(t) ? `<div class="secundario">🔒 Espera: ${esc(nombreTarea(t.antecesoraId) || '—')}</div>` : ''}</td>
+              <td>${L.chipEstado(L.estadoTarea(t))}</td>
               <td>${L.fmtFecha(t.fechaInicio)}${t.fechaFin ? `<div class="secundario">Fin: ${L.fmtFecha(t.fechaFin)}</div>` : ''}</td>
-              <td>${editable && L.abierta(t) ? `<input type="date" data-campo="fechaLimite" value="${esc(t.fechaLimite || '')}" aria-label="Fecha límite">` : L.fmtFecha(t.fechaLimite)}</td>
-              <td>${L.chipVence(t)}${pendientes.has(t.id) ? '<div><span class="chip chip--advertencia">Plazo solicitado</span></div>' : ''}</td>
-              <td><select data-campo="accion" aria-label="Acciones de la tarea">${L.opciones([
-                ...(editable && L.abierta(t) ? [['plazo', 'Definir plazo en días…']] : []),
-                ...(editable ? [['notas', 'Notas…'], ['eliminar', 'Eliminar tarea']] : []),
-                ...(!editable && L.abierta(t) && !t.fechaLimite && L.es('asistente', 'gerente', 'admin') && !pendientes.has(t.id) && p.estado !== 'Finalizado' ? [['solicitar', 'Solicitar definición de plazo']] : []),
-                ['historial', 'Ver historial']
-              ], '', '⋯')}</select></td></tr>`).join('')}</tbody>
+              <td>${L.chipPlazo(t)}${pendientes.has(t.id) ? '<div><span class="chip chip--advertencia">Plazo solicitado</span></div>' : ''}</td>
+              <td class="nowrap">${[items.length ? `☑ ${items.filter((i) => i.hecho).length}/${items.length}` : '', (t.comentarios || []).length ? `💬 ${(t.comentarios || []).length}` : ''].filter(Boolean).join(' · ') || '<span class="secundario">—</span>'}</td></tr>`; }).join('')}</tbody>
           </table></div>
         </section>
 
@@ -158,26 +153,8 @@
 
       L.$('#accion-proceso', v).addEventListener('change', (ev) => { const a = ev.target.value; ev.target.value = ''; accionProceso(p, a); });
       const bt = L.$('#btn-tarea', v); if (bt) bt.addEventListener('click', () => nuevaTarea(p));
-      v.addEventListener('change', async (ev) => {
-        const tr = ev.target.closest('tr[data-tarea]');
-        if (!tr) return;
-        const t = L.D.porTarea[tr.dataset.tarea];
-        const campo = ev.target.dataset.campo;
-        try {
-          if (campo === 'estado') {
-            if (ev.target.value === 'Finalizada' && t.checklist && t.checklist.some((i) => !i.hecho) && !(await L.confirmar('La tarea tiene ítems pendientes en su lista de verificación. ¿Finalizarla de todos modos?'))) { L.pintar(); return; }
-            const r = await L.api('PUT', `/api/tareas/${t.id}`, { estado: ev.target.value });
-            L.notificar(r.sucesoras.length ? `Tarea actualizada. Inician: ${r.sucesoras.map((x) => x.nombre).join(', ')}.` : 'Tarea actualizada.');
-          } else if (campo === 'fechaLimite') {
-            await L.api('PUT', `/api/tareas/${t.id}`, { fechaLimite: ev.target.value });
-            L.notificar('Fecha límite guardada.');
-          } else if (campo === 'accion') {
-            const a = ev.target.value; ev.target.value = '';
-            return accionTarea(t, a);
-          }
-          await L.refrescar();
-        } catch (e) { L.error(e); L.pintar(); }
-      });
+      v.addEventListener('click', (ev) => { const tr = ev.target.closest('tr[data-tarea]'); if (tr) L.abrirTarea(tr.dataset.tarea); });
+      v.addEventListener('keydown', (ev) => { const tr = ev.target.closest('tr[data-tarea]'); if (tr && ev.key === 'Enter') L.abrirTarea(tr.dataset.tarea); });
     }
   };
 
@@ -218,49 +195,6 @@
     } catch (e) { L.error(e); }
   }
 
-  function formPlazo(t) {
-    return `<div class="doble">
-      <label>Días<input type="number" min="0" max="3650" name="dias" value="${t.plazoDias ?? ''}" placeholder="Ej.: 10"></label>
-      <label>Tipo<select name="tipo">${L.opciones([['habiles', 'Días hábiles'], ['calendario', 'Días calendario']], t.tipoDias)}</select></label></div>
-      <p class="secundario" data-previo></p>`;
-  }
-  function previoPlazo(form, t) {
-    const n = parseInt(form.dias.value, 10);
-    const salida = L.$('[data-previo]', form);
-    if (Number.isNaN(n)) { salida.textContent = ''; return; }
-    salida.textContent = t.estado === 'Pendiente'
-      ? `La fecha se calculará cuando la tarea inicie (al concluir su antecesora).`
-      : `Vencerá el ${L.fmtFecha(L.sumarDias(t.fechaInicio || L.hoy(), n, form.tipo.value))}.`;
-  }
-
-  function accionTarea(t, a) {
-    if (a === 'solicitar') return L.solicitarPlazo(t.id);
-    if (a === 'eliminar') {
-      return L.confirmar(`¿Eliminar la tarea «${t.nombre}»? Sus sucesoras pasarán a depender de la tarea anterior.`, { peligro: true, aceptar: 'Eliminar' }).then(async (ok) => {
-        if (!ok) return;
-        try { await L.api('DELETE', `/api/tareas/${t.id}`); await L.refrescar(); } catch (e) { L.error(e); }
-      });
-    }
-    if (a === 'historial') {
-      return L.modal(`${L.cabModal(`Historial · ${esc(t.nombre)}`)}<div class="modal__cuerpo modal__cuerpo--simple"><ul class="lista">${(t.historial || []).slice().reverse().map((h) => `<li><div class="lista__cuerpo"><div>${esc(h.texto)}</div><div class="lista__meta">${esc(h.usuario)} · ${L.fmtFechaHora(h.fecha)}</div></div></li>`).join('') || '<li class="vacio">Sin eventos.</li>'}</ul></div>`, { angosto: true });
-    }
-    if (a === 'notas') {
-      const c = L.modal(`${L.cabModal(`Notas · ${esc(t.nombre)}`)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-n"><textarea name="n" rows="5">${esc(t.notas || '')}</textarea><div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`, { angosto: true });
-      L.$('#f-n', c).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await L.api('PUT', `/api/tareas/${t.id}`, { notas: ev.target.n.value }); L.cerrarModal(); await L.refrescar(); } catch (e) { L.error(e); } });
-    }
-    if (a === 'plazo') {
-      const c = L.modal(`${L.cabModal(`Plazo · ${esc(t.nombre)}`)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-p">${formPlazo(t)}<div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar plazo</button></div></form>`, { angosto: true });
-      const f = L.$('#f-p', c);
-      f.addEventListener('input', () => previoPlazo(f, t));
-      f.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const n = parseInt(f.dias.value, 10);
-        if (Number.isNaN(n)) { L.notificar('Indique el número de días.', 'error'); return; }
-        try { await L.api('PUT', `/api/tareas/${t.id}`, { plazoDias: n, tipoDias: f.tipo.value }); L.cerrarModal(); L.notificar('Plazo guardado.'); await L.refrescar(); } catch (e) { L.error(e); }
-      });
-    }
-  }
-
   function nuevaTarea(p) {
     const tareas = L.tareasDe(p.id);
     const c = L.modal(`${L.cabModal('Agregar tarea', esc(p.codigo))}
@@ -279,35 +213,6 @@
       try { await L.api('POST', '/api/tareas', cuerpo); L.cerrarModal(); L.notificar('Tarea agregada.'); await L.refrescar(); } catch (e) { L.error(e); }
     });
   }
-
-  // ------------------------------------------------------------ mis tareas
-  L.vistas.tareas = {
-    titulo: 'Mis tareas', subtitulo: 'Tareas de mis procesos activos, por estado',
-    render(v) {
-      const activos = new Set(L.D.procesos.filter((p) => p.estado === 'Activo').map((p) => p.id));
-      const tareas = L.D.tareas.filter((t) => activos.has(t.procesoId) && (L.abierta(t) || L.diasEntre(t.fechaFin, L.hoy()) <= 30));
-      const orden = (a, b) => (a.fechaLimite || '9999').localeCompare(b.fechaLimite || '9999');
-      const col = (estado, titulo) => {
-        const lista = tareas.filter((t) => t.estado === estado).sort(orden);
-        return `<div class="kanban__col"><div class="kanban__cab"><h2>${titulo}</h2><span class="cuenta">${lista.length}</span></div><div class="kanban__lista">${lista.map((t) => {
-          const p = L.D.porProceso[t.procesoId];
-          const v2 = L.vencimiento(t).tipo;
-          return `<article class="ficha ${v2 === 'vencida' ? 'vence--vencida' : v2 === 'proxima' ? 'vence--proxima' : ''}" data-tarea="${esc(t.id)}">
-            <div class="ficha__titulo">${esc(t.nombre)}</div>
-            <div class="ficha__proceso"><a href="#proceso/${esc(p.id)}">${esc(p.codigo)}</a> · ${esc(p.titulo)}</div>
-            <div class="ficha__pie">${L.chipVence(t)}<span class="espacio"></span>
-              ${L.puedeEditarTareas(p) ? `<select data-campo="estado" aria-label="Mover a">${L.opciones([['Pendiente', 'Pendiente'], ['En proceso', 'En proceso'], ['Finalizada', 'Finalizada']], t.estado)}</select>` : ''}</div>
-          </article>`;
-        }).join('') || '<p class="vacio">—</p>'}</div></div>`;
-      };
-      v.innerHTML = `<div class="kanban kanban--3">${col('Pendiente', 'Pendientes')}${col('En proceso', 'En proceso')}${col('Finalizada', 'Finalizadas (30 días)')}</div>`;
-      v.addEventListener('change', async (ev) => {
-        const card = ev.target.closest('[data-tarea]');
-        if (!card || ev.target.dataset.campo !== 'estado') return;
-        try { const r = await L.api('PUT', `/api/tareas/${card.dataset.tarea}`, { estado: ev.target.value }); L.notificar(r.sucesoras.length ? `Inician: ${r.sucesoras.map((x) => x.nombre).join(', ')}.` : 'Tarea actualizada.'); await L.refrescar(); } catch (e) { L.error(e); L.pintar(); }
-      });
-    }
-  };
 
   // ------------------------------------------------------- plazos por definir
   L.vistas.plazos = {
@@ -336,8 +241,8 @@
             const urgente = alertaPor.has(t.id) || solicitadas.has(t.id);
             return `<tr data-tarea="${esc(t.id)}" class="${urgente ? 'fila-urgente' : ''}">
               <td class="mono"><a href="#proceso/${esc(p.id)}">${esc(p.codigo)}</a><div class="secundario">${esc(L.nombreVia(p.via))}</div></td>
-              <td><strong>${esc(t.nombre)}</strong> ${L.chipEstado(t.estado)}${solicitadas.has(t.id) ? ' <span class="chip chip--advertencia">Solicitado</span>' : ''}${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}</td>
-              <td>${ant ? `${esc(ant.nombre)}<br>${L.chipEstado(ant.estado)}` : '<span class="secundario">— (inicia con el proceso)</span>'}</td>
+              <td><a href="#" class="enlace-tarea" data-abrir="${esc(t.id)}"><strong>${esc(t.nombre)}</strong></a> ${L.chipEstado(L.estadoTarea(t))}${solicitadas.has(t.id) ? ' <span class="chip chip--advertencia">Solicitado</span>' : ''}${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}</td>
+              <td>${ant ? `${esc(ant.nombre)}<br>${L.chipEstado(L.estadoTarea(ant))}` : '<span class="secundario">— (inicia con el proceso)</span>'}</td>
               <td><input type="date" data-campo="fecha" value="${esc(t.fechaLimite || '')}" min="${esc(t.fechaInicio || '')}" aria-label="Fecha límite"></td>
               <td class="plazo-dias"><input type="number" min="0" max="3650" data-campo="dias" value="${t.plazoDias ?? ''}" aria-label="Días" placeholder="días"><select data-campo="tipo" aria-label="Tipo de días">${L.opciones([['habiles', 'hábiles'], ['calendario', 'calendario']], t.tipoDias)}</select></td>
               <td data-resultado class="secundario">${esc(L.vencimiento(t).texto)}</td></tr>`;
@@ -360,7 +265,7 @@
         else if (dias.value !== '') {
           const n = parseInt(dias.value, 10);
           cambios.set(t.id, { id: t.id, plazoDias: n, tipoDias: tipo });
-          res.textContent = t.estado === 'Pendiente' ? 'Se calculará al iniciar la tarea' : `Vence el ${L.fmtFecha(L.sumarDias(t.fechaInicio || L.hoy(), n, tipo))}`;
+          res.textContent = !t.fechaInicio ? 'Se calculará al habilitarse la tarea' : `Vence el ${L.fmtFecha(L.sumarDias(t.fechaInicio, n, tipo))}`;
         } else { cambios.delete(t.id); res.textContent = L.vencimiento(t).texto; }
         tr.classList.toggle('fila-cambiada', cambios.has(t.id));
         btn.disabled = !cambios.size;

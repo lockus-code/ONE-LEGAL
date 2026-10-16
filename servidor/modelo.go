@@ -13,9 +13,14 @@ const (
 	ProcesoSuspendido = "Suspendido"
 	ProcesoFinalizado = "Finalizado"
 
-	TareaPendiente  = "Pendiente"
+	TareaPendiente  = "Pendiente" // «Por hacer» en el tablero
 	TareaEnProceso  = "En proceso"
+	TareaEnRevision = "En revisión"
 	TareaFinalizada = "Finalizada"
+
+	PlantillaPendiente = "pendiente" // enviada a aprobación
+	PlantillaAprobada  = "aprobada"
+	PlantillaObservada = "observada"
 
 	DiasHabiles    = "habiles"
 	DiasCalendario = "calendario"
@@ -117,10 +122,20 @@ type Plantilla struct {
 	Nombre        string  `json:"nombre"`
 	Categoria     string  `json:"categoria"`
 	Via           string  `json:"via"`
-	Tareas        []Etapa `json:"tareas"`
-	CreadaEn      string  `json:"creadaEn"`
-	ActualizadaEn string  `json:"actualizadaEn"`
+	Tareas        []Etapa `json:"tareas"` // versión en edición (la última enviada)
+	// Aprobación: solo la versión aprobada genera ciclos de procesos.
+	Estado          string  `json:"estado"`
+	TareasAprobadas []Etapa `json:"tareasAprobadas,omitempty"`
+	NombreAprobado  string  `json:"nombreAprobado,omitempty"`
+	AprobadaPor     string  `json:"aprobadaPor,omitempty"`
+	AprobadaEn      string  `json:"aprobadaEn,omitempty"`
+	Observacion     string  `json:"observacion,omitempty"`
+	Version         int     `json:"version"`
+	CreadaEn        string  `json:"creadaEn"`
+	ActualizadaEn   string  `json:"actualizadaEn"`
 }
+
+func (p Plantilla) Aprobada() bool { return len(p.TareasAprobadas) > 0 }
 
 // --------------------------------------------------- procesos y tareas
 
@@ -172,6 +187,8 @@ type Tarea struct {
 	Referencia       string   `json:"referencia,omitempty"`
 	Checklist        []Item   `json:"checklist,omitempty"`
 	Notas            string   `json:"notas,omitempty"`
+	Color            string   `json:"color,omitempty"`
+	Comentarios      []Evento `json:"comentarios,omitempty"`
 	Historial        []Evento `json:"historial,omitempty"`
 	ActualizadaEn    string   `json:"actualizadaEn"`
 }

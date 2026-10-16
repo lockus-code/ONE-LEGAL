@@ -60,39 +60,61 @@
     };
   };
 
+  const ESTADOS_PLT = { pendiente: 'Por aprobar', aprobada: 'Aprobada', observada: 'Observada' };
+  const chipPlantilla = (p) => ({
+    aprobada: `<span class="chip chip--estado-finalizada">✓ Aprobada · v${p.version}</span>`,
+    pendiente: `<span class="chip chip--advertencia">◷ Por aprobar · v${p.version}</span>`,
+    observada: `<span class="chip chip--critico">✎ Observada · v${p.version}</span>`
+  }[p.estado] || '');
+  const plazoTxt = (t) => (t.plazoDias === null || t.plazoDias === undefined ? 'por definir' : `${t.plazoDias} d. ${t.tipoDias === 'calendario' ? 'cal.' : 'háb.'}`);
+  const listaTareas = (tareas) => `<ol class="ciclo-lista">${tareas.map((t) => `<li>${esc(t.nombre)} <span class="secundario">· ${plazoTxt(t)}</span></li>`).join('')}</ol>`;
+
   L.vistas.plantillas = {
-    titulo: () => (L.es('admin') ? 'Plantillas de los profesionales' : 'Mis plantillas'),
-    subtitulo: 'El ciclo de tareas que se genera al crear un proceso de cada vía',
+    titulo: () => ({ admin: 'Plantillas de los profesionales', gerente: 'Plantillas', profesional: 'Mis plantillas' })[L.rol()],
+    subtitulo: () => (L.es('gerente', 'admin') ? 'Revise y apruebe las plantillas: solo las aprobadas generan procesos' : 'Su ciclo de tareas por vía procedimental. Cada cambio se envía a aprobación de la gerencia'),
     filtroProfesional: '',
+    filtroEstado: null,
     render(v) {
-      const esAdmin = L.es('admin');
-      const lista = L.D.plantillas.filter((p) => (esAdmin ? !this.filtroProfesional || p.profesionalId === this.filtroProfesional : p.profesionalId === L.yo().id))
-        .sort((a, b) => a.categoria.localeCompare(b.categoria) || a.nombre.localeCompare(b.nombre));
-      const usadas = new Set(lista.map((p) => p.via));
-      const sugeridas = L.es('profesional') ? [...new Set(L.D.procesos.filter((p) => p.cicloBase && !usadas.has(p.via)).map((p) => p.via))] : [];
+      const revisor = L.es('gerente', 'admin');
+      if (this.filtroEstado === null) this.filtroEstado = revisor && L.D.plantillas.some((x) => x.estado === 'pendiente') ? 'pendiente' : '';
+      const propias = L.es('profesional');
+      const lista = L.D.plantillas.filter((p) => (propias ? p.profesionalId === L.yo().id : !this.filtroProfesional || p.profesionalId === this.filtroProfesional) && (!this.filtroEstado || p.estado === this.filtroEstado))
+        .sort((a, b) => (a.estado === 'pendiente' ? -1 : 0) - (b.estado === 'pendiente' ? -1 : 0) || a.categoria.localeCompare(b.categoria) || a.nombre.localeCompare(b.nombre));
+      const cuenta = (e) => L.D.plantillas.filter((p) => (!propias || p.profesionalId === L.yo().id) && p.estado === e).length;
       v.innerHTML = `
         <div class="barra-filtros">
-          ${esAdmin ? `<label>Profesional<select id="f-prof">${L.opciones(L.profesionales(false).map((u) => [u.id, u.nombre]), this.filtroProfesional, 'Todos')}</select></label>` : ''}
+          ${propias ? '' : `<label>Profesional<select id="f-prof">${L.opciones(L.profesionales(false).map((u) => [u.id, u.nombre]), this.filtroProfesional, 'Todos')}</select></label>`}
+          <label>Estado<select id="f-estado">${L.opciones(Object.entries(ESTADOS_PLT).map(([k, t]) => [k, `${t} (${cuenta(k)})`]), this.filtroEstado, 'Todas')}</select></label>
           <span class="espacio"></span>
-          <button class="btn btn--primario" id="btn-nueva" ${esAdmin && !L.profesionales().length ? 'disabled title="Primero cree profesionales"' : ''}>+ Nueva plantilla</button>
+          ${L.es('profesional', 'admin') ? `<button class="btn btn--primario" id="btn-nueva" ${L.es('admin') && !L.profesionales().length ? 'disabled title="Primero cree profesionales"' : ''}>+ Nueva plantilla</button>` : ''}
         </div>
-        ${sugeridas.length ? `<div class="aviso aviso--alerta"><span>Tiene procesos generados con el ciclo base de: ${sugeridas.map((x) => `<strong>${esc(L.nombreVia(x))}</strong>`).join(', ')}. Cree su plantilla para que los próximos usen sus propias tareas.</span></div>` : ''}
-        ${lista.length ? `<div class="rejilla rejilla--plantillas">${lista.map((p) => `
-          <article class="tarjeta plantilla">
+        ${propias ? '<div class="aviso aviso--info"><span>Al guardar, la plantilla queda <strong>por aprobar</strong>. Mientras la gerencia la revisa, los procesos nuevos usan la última versión aprobada; las vías sin versión aprobada no se ofrecen en la extensión.</span></div>' : ''}
+        ${lista.length ? `<div class="rejilla rejilla--plantillas">${lista.map((p) => {
+          const acciones = [];
+          if (revisor && p.estado === 'pendiente') acciones.push(['revisar', 'Revisar y aprobar…']);
+          if (L.es('profesional', 'admin')) acciones.push(['editar', 'Editar'], ['copiar', 'Usar como base para otra vía'], ['eliminar', 'Eliminar']);
+          if (!acciones.length || (revisor && p.estado !== 'pendiente')) acciones.push(['ver', 'Ver detalle']);
+          return `<article class="tarjeta plantilla plantilla--${esc(p.estado)}">
             <div class="plantilla__meta">${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))}</div>
-            <h3>${esc(p.nombre)}</h3>
-            ${esAdmin ? `<p class="secundario">${esc(L.nombre(p.profesionalId))}</p>` : ''}
-            <ol class="ciclo-lista">${p.tareas.map((t) => `<li>${esc(t.nombre)} <span class="secundario">· ${t.plazoDias === null || t.plazoDias === undefined ? 'por definir' : `${t.plazoDias} d. ${t.tipoDias === 'calendario' ? 'cal.' : 'háb.'}`}</span></li>`).join('')}</ol>
-            <div class="plantilla__acciones"><select data-plantilla="${esc(p.id)}" aria-label="Acciones">${L.opciones([['editar', 'Editar'], ['copiar', 'Usar como base para otra vía'], ['eliminar', 'Eliminar']], '', 'Acciones…')}</select>
-            <span class="secundario">Actualizada ${L.fmtFecha(p.actualizadaEn)}</span></div>
-          </article>`).join('')}</div>` : `<section class="tarjeta"><p class="vacio">${esAdmin ? 'No hay plantillas.' : 'Aún no tiene plantillas. Cree una por cada vía que atiende: puede partir de las etapas normativas base y ajustar tareas y plazos.'}</p></section>`}`;
+            <div class="plantilla__titulo"><h3>${esc(p.nombre)}</h3>${chipPlantilla(p)}</div>
+            ${propias ? '' : `<p class="secundario">${esc(L.nombre(p.profesionalId))}</p>`}
+            ${p.observacion && p.estado === 'observada' ? `<div class="nota">Observación: ${esc(p.observacion)}</div>` : ''}
+            ${p.estado !== 'aprobada' && (p.tareasAprobadas || []).length ? `<p class="secundario">En uso: versión aprobada el ${L.fmtFecha(p.aprobadaEn)} (${p.tareasAprobadas.length} tareas).</p>` : ''}
+            ${p.estado !== 'aprobada' && !(p.tareasAprobadas || []).length ? '<p class="secundario">Aún sin versión aprobada: esta vía no está disponible para crear procesos.</p>' : ''}
+            ${listaTareas(p.tareas)}
+            <div class="plantilla__acciones"><span class="secundario">Actualizada ${L.fmtFecha(p.actualizadaEn)}</span>
+              <select data-plantilla="${esc(p.id)}" aria-label="Acciones de la plantilla">${L.opciones(acciones, '', 'Acciones…')}</select></div>
+          </article>`;
+        }).join('')}</div>` : `<section class="tarjeta"><p class="vacio">${propias ? (L.D.plantillas.some((x) => x.profesionalId === L.yo().id) ? 'No hay plantillas con este estado.' : 'Aún no tiene plantillas. Cree una por cada vía que atiende: puede partir de las etapas normativas base y ajustar tareas y plazos.') : (this.filtroEstado === 'pendiente' ? 'No hay plantillas por aprobar. ✓' : 'No hay plantillas con estos filtros.')}</p></section>`}`;
       const fp = L.$('#f-prof', v); if (fp) fp.addEventListener('change', (ev) => { this.filtroProfesional = ev.target.value; L.pintar(); });
-      L.$('#btn-nueva', v).addEventListener('click', () => editarPlantilla(null));
+      L.$('#f-estado', v).addEventListener('change', (ev) => { this.filtroEstado = ev.target.value; L.pintar(); });
+      const bn = L.$('#btn-nueva', v); if (bn) bn.addEventListener('click', () => editarPlantilla(null));
       v.addEventListener('change', async (ev) => {
         const id = ev.target.dataset.plantilla;
         if (!id) return;
         const a = ev.target.value; ev.target.value = '';
         const p = L.D.plantillas.find((x) => x.id === id);
+        if (a === 'revisar' || a === 'ver') revisarPlantilla(p, a === 'revisar');
         if (a === 'editar') editarPlantilla(p);
         if (a === 'copiar') editarPlantilla({ ...p, id: null, nombre: `${p.nombre} (copia)`, via: '', categoria: p.categoria });
         if (a === 'eliminar' && (await L.confirmar(`¿Eliminar la plantilla «${p.nombre}»? Los procesos ya creados conservan sus tareas.`, { peligro: true, aceptar: 'Eliminar' }))) {
@@ -101,6 +123,32 @@
       });
     }
   };
+
+  function revisarPlantilla(p, decidir) {
+    const aprobada = p.tareasAprobadas || [];
+    const tabla = (tareas) => `<table class="tabla"><thead><tr><th class="num">#</th><th>Tarea</th><th>Plazo</th><th>Desde</th></tr></thead><tbody>${tareas.map((t, i) => `<tr><td class="num">${i + 1}</td><td>${esc(t.nombre)}${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}</td><td>${plazoTxt(t)}</td><td>${t.desde === 'inicio' ? 'Inicio del proceso' : 'Fin de la antecesora'}</td></tr>`).join('')}</tbody></table>`;
+    const c = L.modal(`${L.cabModal(esc(p.nombre), `${esc(L.nombre(p.profesionalId))} · ${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))} · ${chipPlantilla(p)}`)}
+      <div class="modal__cuerpo modal__cuerpo--simple">
+        <div class="${aprobada.length && p.estado !== 'aprobada' ? 'rejilla rejilla--2' : ''}">
+          <section><h3 class="subtitulo">${p.estado === 'aprobada' ? 'Versión aprobada' : `Versión propuesta (v${p.version})`}</h3><div class="tabla-envoltura">${tabla(p.tareas)}</div></section>
+          ${aprobada.length && p.estado !== 'aprobada' ? `<section><h3 class="subtitulo">Versión aprobada vigente</h3><div class="tabla-envoltura">${tabla(aprobada)}</div></section>` : ''}
+        </div>
+        ${p.aprobadaPor ? `<p class="secundario">Última aprobación: ${esc(p.aprobadaPor)} · ${L.fmtFechaHora(p.aprobadaEn)}</p>` : ''}
+        ${decidir ? `<form id="f-rev" class="formulario">
+          <label>Observación (obligatoria para observar; opcional al aprobar)<textarea name="obs" rows="3" placeholder="Ej.: Defina el plazo de la etapa de alegatos."></textarea></label>
+          <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button type="button" class="btn" data-decision="observar">Observar</button><button type="button" class="btn btn--primario" data-decision="aprobar">Aprobar</button></div>
+        </form>` : ''}
+      </div>`);
+    L.$$('[data-decision]', c).forEach((b) => b.addEventListener('click', async () => {
+      const obs = L.$('#f-rev', c).obs.value;
+      try {
+        await L.api('POST', `/api/plantillas/${p.id}/revision`, { decision: b.dataset.decision, observacion: obs });
+        L.cerrarModal();
+        L.notificar(b.dataset.decision === 'aprobar' ? 'Plantilla aprobada: ya puede usarse para crear procesos.' : 'Plantilla observada: el profesional verá la observación.');
+        await L.refrescar();
+      } catch (e) { L.error(e); }
+    }));
+  }
 
   function editarPlantilla(p) {
     const nueva = !p || !p.id;
@@ -116,7 +164,7 @@
         <label>Nombre de la plantilla<input name="nombre" value="${esc((p && p.nombre) || '')}" placeholder="Por defecto, el nombre de la vía"></label>
         <div class="acciones-linea"><select id="cargar" aria-label="Cargar tareas">${L.opciones([['base', 'Reemplazar por las etapas normativas base de la vía'], ...L.D.plantillas.filter((x) => !p || x.id !== p.id).map((x) => [x.id, `Copiar tareas de «${x.nombre}»${esAdmin ? ` (${L.nombre(x.profesionalId)})` : ''}`])], '', 'Cargar tareas desde…')}</select></div>
         <div id="editor"></div>
-        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar plantilla</button></div>
+        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar y enviar a aprobación</button></div>
       </form>`);
     const f = L.$('#f-plt', c);
     const editor = L.editorTareas(L.$('#editor', c), (p && p.tareas) || []);
@@ -148,7 +196,7 @@
       try {
         await L.api(nueva ? 'POST' : 'PUT', nueva ? '/api/plantillas' : `/api/plantillas/${p.id}`, cuerpo);
         L.cerrarModal();
-        L.notificar('Plantilla guardada: se usará en los próximos procesos de esta vía.');
+        L.notificar('Plantilla enviada a aprobación de la gerencia.');
         await L.refrescar();
       } catch (e) { L.error(e); }
     });

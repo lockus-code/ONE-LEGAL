@@ -60,6 +60,7 @@ func (s *Servidor) Rutas() http.Handler {
 
 	mux.HandleFunc("POST /api/plantillas", s.con(s.manejarPlantilla, RolProfesional, RolAdmin))
 	mux.HandleFunc("/api/plantillas/{id}", s.con(s.manejarPlantilla, RolProfesional, RolAdmin))
+	mux.HandleFunc("POST /api/plantillas/{id}/revision", s.con(s.manejarRevisionPlantilla, RolGerente, RolAdmin))
 
 	mux.HandleFunc("POST /api/procesos", s.con(s.manejarCrearProceso, RolAsistente, RolProfesional, RolAdmin))
 	mux.HandleFunc("/api/procesos/{id}", s.con(s.manejarProceso))
@@ -258,7 +259,7 @@ func (s *Servidor) manejarDatos(w http.ResponseWriter, r *http.Request) {
 		"tareas":      tareas,
 		"tramites":    tramites,
 		"solicitudes": solicitudes,
-		"alertas":     calcularAlertas(u, procesos, tareas, tramites, solicitudes, usuarios, cfg, cal),
+		"alertas":     calcularAlertas(u, procesos, tareas, tramites, solicitudes, usuarios, plantillas, cfg, cal),
 		"config":      cfg,
 		"feriados":    cal.Lista(),
 		"hoy":         hoy(),
@@ -284,15 +285,18 @@ func (s *Servidor) manejarCatalogo(w http.ResponseWriter, r *http.Request) {
 		Cargo      string             `json:"cargo"`
 		Plantillas []plantillaResumen `json:"plantillas"`
 	}
+	// Un profesional solo se ve a sí mismo y solo trabaja sobre sus procesos.
+	yo := usuarioDe(r)
+	soloPropio := yo.Rol == RolProfesional
 	profesionales := []profesional{}
 	for _, u := range usuarios {
-		if u.Rol != RolProfesional || !u.Activo {
+		if u.Rol != RolProfesional || !u.Activo || (soloPropio && u.ID != yo.ID) {
 			continue
 		}
 		p := profesional{ID: u.ID, Nombre: u.Nombre, Cargo: u.Cargo, Plantillas: []plantillaResumen{}}
 		for _, pl := range plantillas {
-			if pl.ProfesionalID == u.ID {
-				p.Plantillas = append(p.Plantillas, plantillaResumen{pl.ID, pl.Nombre, pl.Via, pl.Categoria, len(pl.Tareas)})
+			if pl.ProfesionalID == u.ID && pl.Aprobada() { // solo se ofrecen vías con plantilla aprobada
+				p.Plantillas = append(p.Plantillas, plantillaResumen{pl.ID, valorO(pl.NombreAprobado, pl.Nombre), pl.Via, pl.Categoria, len(pl.TareasAprobadas)})
 			}
 		}
 		profesionales = append(profesionales, p)
@@ -300,7 +304,7 @@ func (s *Servidor) manejarCatalogo(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(profesionales, func(i, j int) bool { return profesionales[i].Nombre < profesionales[j].Nombre })
 	enCurso := []map[string]any{}
 	for _, p := range procesos {
-		if p.Estado == ProcesoFinalizado {
+		if p.Estado == ProcesoFinalizado || (soloPropio && p.ProfesionalID != yo.ID) {
 			continue
 		}
 		enCurso = append(enCurso, map[string]any{"id": p.ID, "codigo": p.Codigo, "titulo": p.Titulo, "categoria": p.Categoria, "via": p.Via, "profesionalId": p.ProfesionalID, "estado": p.Estado, "fechaInicio": p.FechaInicio})
@@ -433,8 +437,15 @@ func (s *Servidor) manejarPlantilla(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.Nombre = strings.TrimSpace(p.Nombre)
+	// Cada versión guardada queda pendiente de aprobación; mientras tanto se sigue usando la última aprobada.
+	p.Estado, p.Observacion, p.TareasAprobadas, p.NombreAprobado, p.AprobadaPor, p.AprobadaEn, p.Version = PlantillaPendiente, "", nil, "", "", "", 1
 	if actual != nil {
 		p.ID, p.CreadaEn, p.ProfesionalID = actual.ID, actual.CreadaEn, actual.ProfesionalID
+		p.TareasAprobadas, p.NombreAprobado, p.AprobadaPor, p.AprobadaEn, p.Version = actual.TareasAprobadas, actual.NombreAprobado, actual.AprobadaPor, actual.AprobadaEn, actual.Version+1
+		if actual.Categoria != p.Categoria || actual.Via != p.Via {
+			rechazar(w, http.StatusUnprocessableEntity, "La vía de una plantilla no se puede cambiar; cree otra plantilla.")
+			return
+		}
 	} else {
 		p.ID, p.CreadaEn = nuevoID("PLT"), ahora()
 		if u.Rol != RolAdmin || p.ProfesionalID == "" {
@@ -491,7 +502,7 @@ func (s *Servidor) manejarPlantilla(w http.ResponseWriter, r *http.Request) {
 		errorInterno(w, err)
 		return
 	}
-	s.auditar(u.Usuario, "plantilla", p.Nombre)
+	s.auditar(u.Usuario, "plantilla enviada a aprobación", fmt.Sprintf("%s (versión %d)", p.Nombre, p.Version))
 	estado := http.StatusOK
 	if actual == nil {
 		estado = http.StatusCreated
@@ -511,6 +522,46 @@ type entradaProceso struct {
 	Organo             string `json:"organo"`
 	Contraparte        string `json:"contraparte"`
 	Observaciones      string `json:"observaciones"`
+}
+
+// manejarRevisionPlantilla: la gerencia (o el administrador) aprueba u observa la versión enviada.
+func (s *Servidor) manejarRevisionPlantilla(w http.ResponseWriter, r *http.Request) {
+	u := usuarioDe(r)
+	var sol struct {
+		Decision    string `json:"decision"` // aprobar | observar
+		Observacion string `json:"observacion"`
+	}
+	if !leerJSON(w, r, &sol) {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := obtener[Plantilla](s.bd, colPlantillas, r.PathValue("id"))
+	if err != nil {
+		rechazar(w, http.StatusNotFound, "La plantilla no existe.")
+		return
+	}
+	switch sol.Decision {
+	case "aprobar":
+		p.Estado, p.TareasAprobadas, p.NombreAprobado = PlantillaAprobada, p.Tareas, p.Nombre
+		p.AprobadaPor, p.AprobadaEn, p.Observacion = u.Usuario, ahora(), strings.TrimSpace(sol.Observacion)
+	case "observar":
+		if strings.TrimSpace(sol.Observacion) == "" {
+			rechazar(w, http.StatusUnprocessableEntity, "Indique la observación para el profesional.")
+			return
+		}
+		p.Estado, p.Observacion = PlantillaObservada, strings.TrimSpace(sol.Observacion)
+	default:
+		rechazar(w, http.StatusUnprocessableEntity, "Decisión no válida.")
+		return
+	}
+	p.ActualizadaEn = ahora()
+	if err := s.bd.GuardarJSON(colPlantillas, p.ID, p); err != nil {
+		errorInterno(w, err)
+		return
+	}
+	s.auditar(u.Usuario, "plantilla "+map[string]string{"aprobar": "aprobada", "observar": "observada"}[sol.Decision], fmt.Sprintf("%s (versión %d)", p.Nombre, p.Version))
+	responder(w, http.StatusOK, map[string]any{"plantilla": p})
 }
 
 // crearProceso valida, asigna el código correlativo y genera el ciclo de tareas.
@@ -541,6 +592,9 @@ func (s *Servidor) crearProceso(u *Usuario, e entradaProceso, origen string) (*P
 	} else if _, err := time.Parse(formatoDia, e.FechaInicio); err != nil {
 		return nil, nil, fallo(http.StatusUnprocessableEntity, "La fecha de inicio no es válida.")
 	}
+	if s.plantillaPara(prof.ID, e.Via) == nil {
+		return nil, nil, fallo(http.StatusUnprocessableEntity, "%s no tiene una plantilla aprobada para «%s». Créela y solicite su aprobación.", prof.Nombre, via.Nombre)
+	}
 	anio := time.Now().Year()
 	n, err := s.bd.Siguiente(fmt.Sprintf("proceso-%d", anio))
 	if err != nil {
@@ -553,7 +607,11 @@ func (s *Servidor) crearProceso(u *Usuario, e entradaProceso, origen string) (*P
 		Contraparte: strings.TrimSpace(e.Contraparte), Observaciones: strings.TrimSpace(e.Observaciones),
 		CreadoPor: u.Usuario, CreadoEn: ahora(), ActualizadoEn: ahora(),
 	}
-	tareas, err := s.generarCiclo(p, via, u.Usuario)
+	plt := s.plantillaPara(prof.ID, e.Via)
+	if plt == nil {
+		return nil, nil, fallo(http.StatusUnprocessableEntity, "%s no tiene una plantilla aprobada para «%s». Créela y solicite su aprobación.", prof.Nombre, via.Nombre)
+	}
+	tareas, err := s.generarCiclo(p, plt, u.Usuario)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -750,12 +808,12 @@ func (s *Servidor) aplicarPlazo(t *Tarea, e entradaPlazo, usuario string, cal Ca
 		if t.TipoDias == DiasCalendario {
 			tipo = "calendario"
 		}
-		if t.Estado != TareaPendiente {
-			t.FechaLimite = cal.Sumar(valorO(t.FechaInicio, hoy()), dias, t.TipoDias)
+		if t.FechaInicio != "" { // tarea habilitada: el plazo ya corre
+			t.FechaLimite = cal.Sumar(t.FechaInicio, dias, t.TipoDias)
 			t.Historial = append(t.Historial, Evento{ahora(), usuario, fmt.Sprintf("Plazo: %d días %s → vence el %s", dias, tipo, t.FechaLimite)})
 		} else {
 			t.FechaLimite = ""
-			t.Historial = append(t.Historial, Evento{ahora(), usuario, fmt.Sprintf("Plazo: %d días %s desde que inicie la tarea", dias, tipo)})
+			t.Historial = append(t.Historial, Evento{ahora(), usuario, fmt.Sprintf("Plazo: %d días %s desde que se habilite la tarea", dias, tipo)})
 		}
 	default:
 		return nil
@@ -798,8 +856,11 @@ func (s *Servidor) manejarTarea(w http.ResponseWriter, r *http.Request) {
 			Nombre      *string `json:"nombre"`
 			Descripcion *string `json:"descripcion"`
 			Estado      *string `json:"estado"`
-			Notas       *string `json:"notas"`
-			Checklist   *[]Item `json:"checklist"`
+			Notas         *string `json:"notas"`
+			Checklist     *[]Item `json:"checklist"`
+			Color         *string `json:"color"`
+			Comentario    string  `json:"comentario"`
+			Justificacion string  `json:"justificacion"`
 		}
 		if !leerJSON(w, r, &sol) {
 			return
@@ -814,16 +875,29 @@ func (s *Servidor) manejarTarea(w http.ResponseWriter, r *http.Request) {
 			t.Notas = strings.TrimSpace(*sol.Notas)
 		}
 		if sol.Checklist != nil {
-			t.Checklist = *sol.Checklist
+			t.Checklist = []Item{}
+			for _, it := range *sol.Checklist {
+				if it.Texto = strings.TrimSpace(it.Texto); it.Texto != "" {
+					t.Checklist = append(t.Checklist, it)
+				}
+			}
+		}
+		if sol.Color != nil {
+			if c := strings.TrimSpace(*sol.Color); c == "" || reColor.MatchString(c) {
+				t.Color = c
+			}
+		}
+		if c := strings.TrimSpace(sol.Comentario); c != "" {
+			t.Comentarios = append(t.Comentarios, Evento{Fecha: ahora(), Usuario: u.Usuario, Texto: c})
 		}
 		cal := s.calendario()
 		var sucesoras []Tarea
 		if sol.Estado != nil {
-			if *sol.Estado != TareaPendiente && *sol.Estado != TareaEnProceso && *sol.Estado != TareaFinalizada {
-				rechazar(w, http.StatusUnprocessableEntity, "Estado de tarea no válido.")
+			var err error
+			if sucesoras, err = s.cambiarEstadoTarea(&t, *sol.Estado, sol.Justificacion, u.Usuario); err != nil {
+				responderError(w, err)
 				return
 			}
-			sucesoras, _ = s.cambiarEstadoTarea(&t, *sol.Estado, u.Usuario)
 		}
 		if err := s.aplicarPlazo(&t, sol.entradaPlazo, u.Usuario, cal); err != nil {
 			responderError(w, err)
@@ -881,7 +955,7 @@ func (s *Servidor) manejarCrearTarea(w http.ResponseWriter, r *http.Request) {
 	}
 	tareas := s.tareasDe(p.ID)
 	t := Tarea{ID: nuevoID("TAR"), ProcesoID: p.ID, Orden: len(tareas) + 1, Nombre: strings.TrimSpace(sol.Nombre), Descripcion: strings.TrimSpace(sol.Descripcion),
-		Estado: TareaEnProceso, TipoDias: DiasHabiles, Desde: DesdeAntecesora, FechaInicio: hoy(), ActualizadaEn: ahora(),
+		Estado: TareaPendiente, TipoDias: DiasHabiles, Desde: DesdeAntecesora, FechaInicio: hoy(), ActualizadaEn: ahora(),
 		Historial: []Evento{{ahora(), u.Usuario, "Tarea agregada por el profesional"}}}
 	if sol.AntecesoraID != "" {
 		var ant *Tarea
@@ -896,7 +970,7 @@ func (s *Servidor) manejarCrearTarea(w http.ResponseWriter, r *http.Request) {
 		}
 		t.AntecesoraID = ant.ID
 		if ant.Estado != TareaFinalizada {
-			t.Estado, t.FechaInicio = TareaPendiente, ""
+			t.FechaInicio = "" // se habilita cuando finalice la antecesora
 		}
 	}
 	if err := s.aplicarPlazo(&t, sol.entradaPlazo, u.Usuario, s.calendario()); err != nil {
@@ -967,6 +1041,8 @@ type entradaIndexar struct {
 
 var reTramite = regexp.MustCompile(`^\S.{0,80}$`)
 
+var reColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
 func (s *Servidor) manejarIndexar(w http.ResponseWriter, r *http.Request) {
 	u := usuarioDe(r)
 	var e entradaIndexar
@@ -1010,6 +1086,13 @@ func (s *Servidor) manejarIndexar(w http.ResponseWriter, r *http.Request) {
 	case "nuevo":
 		if strings.TrimSpace(e.Proceso.Titulo) == "" {
 			e.Proceso.Titulo = t.AsuntoSGD
+		}
+		// El proceso inicia en la fecha de ingreso del trámite al SGD (dd/mm/aaaa hh:mm:ss).
+		if e.Proceso.FechaInicio == "" {
+			dia, _, _ := strings.Cut(strings.TrimSpace(t.FechaIngresoSGD), " ")
+			if f, err := time.Parse("02/01/2006", dia); err == nil && !f.After(time.Now()) {
+				e.Proceso.FechaInicio = f.Format(formatoDia)
+			}
 		}
 		var err error
 		p, tareas, err = s.crearProceso(u, e.Proceso, "SGD")

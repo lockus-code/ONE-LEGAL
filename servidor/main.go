@@ -38,7 +38,7 @@ var iconoICO []byte
 //go:embed recursos/icono.png
 var iconoPNG []byte
 
-var version = "1.0.0"
+var version = "1.1.0"
 
 func main() {
 	sinBandeja := flag.Bool("sin-bandeja", false, "no mostrar el ícono en la bandeja del sistema")

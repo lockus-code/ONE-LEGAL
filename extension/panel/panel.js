@@ -46,7 +46,7 @@
   function mostrarMensaje(tipo, html) {
     const m = $('#mensaje');
     m.className = `aviso aviso--${tipo}`;
-    m.innerHTML = html;
+    m.innerHTML = `<span>${html}</span>`;
   }
 
   function depurarUrl(url, sensibles) {
@@ -73,6 +73,8 @@
 
   // -------------------------------------------------- 0. sesión en el servidor LEGAL
   function mostrarIngreso(mensaje) {
+    $('#mensaje').className = 'aviso oculto';
+    estado.claveTramite = null;
     $('#form-ingreso').classList.remove('oculto');
     $('#principal').classList.add('oculto');
     $('#estado').classList.add('oculto');
@@ -278,34 +280,46 @@
     if (accion === 'existente') pintarExistente();
   }
 
-  // -- proceso nuevo: Profesional → Vía, o Categoría → Vía → Profesional
+  // -- proceso nuevo: Profesional → Vía, o Categoría → Vía → Profesional.
+  // Solo se ofrecen vías para las que el profesional tiene una plantilla APROBADA.
+  const soyProfesional = () => cat().usuario.rol === 'profesional';
+  const viasConPlantilla = () => new Set(cat().profesionales.flatMap((p) => p.plantillas.map((x) => x.via)));
+
   function pintarNuevo() {
+    if (soyProfesional()) campo('criterioNuevo').value = 'profesional';
+    campo('criterioNuevo').closest('label').classList.toggle('oculto', soyProfesional());
     const criterio = campo('criterioNuevo').value;
     document.querySelectorAll('#cascada-nuevo > label').forEach((l) => {
       l.style.order = l.dataset[criterio === 'profesional' ? 'ordenProfesional' : 'ordenCategoria'];
       if (l.dataset.soloCriterio) l.classList.toggle('oculto', l.dataset.soloCriterio !== criterio);
     });
-    const profs = cat().profesionales;
+    const profs = cat().profesionales.filter((p) => p.plantillas.length);
+    const selProf = campo('profesionalNuevo');
     if (criterio === 'profesional') {
-      llenar(campo('profesionalNuevo'), profs.map((p) => [p.id, `${p.nombre}${p.plantillas.length ? ` · ${p.plantillas.length} plantilla(s)` : ''}`]), 'Seleccione el profesional…');
-      const prof = profesional(campo('profesionalNuevo').value);
-      const conPlantilla = prof ? new Set(prof.plantillas.map((p) => p.via)) : new Set();
-      // Las vías se agrupan por categoría (jerarquía normativa); primero las que tienen plantilla del profesional.
-      const grupos = [];
-      if (prof && prof.plantillas.length) {
-        grupos.push({ grupo: 'Con plantilla del profesional', opciones: prof.plantillas.map((p) => { const { c, v } = buscarVia(p.via); return [p.via, `${c ? c.nombre : ''} › ${v ? v.nombre : p.via}`]; }) });
-      }
-      categorias().forEach((c) => grupos.push({ grupo: c.nombre, opciones: viasActivas(c).filter((v) => !conPlantilla.has(v.codigo)).map((v) => [v.codigo, v.nombre]) }));
-      llenar(campo('viaNuevo'), prof ? grupos : [], prof ? 'Seleccione la vía procedimental…' : 'Primero elija el profesional');
+      llenar(selProf, profs.map((p) => [p.id, `${p.nombre} · ${p.plantillas.length} plantilla(s) aprobada(s)`]), soyProfesional() ? undefined : 'Seleccione el profesional…');
+      if (soyProfesional() && profs.length) selProf.value = profs[0].id;
+      const prof = profesional(selProf.value);
+      const porCategoria = new Map();
+      (prof ? prof.plantillas : []).forEach((x) => {
+        const { c, v } = buscarVia(x.via);
+        if (!c || !v || v.desactivada) return;
+        if (!porCategoria.has(c.nombre)) porCategoria.set(c.nombre, []);
+        porCategoria.get(c.nombre).push([x.via, v.nombre]);
+      });
+      llenar(campo('viaNuevo'), [...porCategoria.entries()].map(([grupo, opciones]) => ({ grupo, opciones })), prof ? 'Seleccione la vía procedimental…' : 'Primero elija el profesional');
     } else {
-      llenar(campo('categoriaNuevo'), categorias().map((c) => [c.codigo, c.nombre]), 'Seleccione la categoría…');
+      const vias = viasConPlantilla();
+      llenar(campo('categoriaNuevo'), categorias().filter((c) => viasActivas(c).some((v) => vias.has(v.codigo))).map((c) => [c.codigo, c.nombre]), 'Seleccione la categoría…');
       const c = categorias().find((x) => x.codigo === campo('categoriaNuevo').value);
-      llenar(campo('viaNuevo'), c ? viasActivas(c).map((v) => [v.codigo, v.nombre]) : [], c ? 'Seleccione la vía procedimental…' : 'Primero elija la categoría');
+      llenar(campo('viaNuevo'), c ? viasActivas(c).filter((v) => vias.has(v.codigo)).map((v) => [v.codigo, v.nombre]) : [], c ? 'Seleccione la vía procedimental…' : 'Primero elija la categoría');
       const via = campo('viaNuevo').value;
-      const ordenados = [...profs].sort((a, b) => Number(Boolean(plantillaDe(b.id, via))) - Number(Boolean(plantillaDe(a.id, via))));
-      llenar(campo('profesionalNuevo'), via ? ordenados.map((p) => [p.id, `${p.nombre} · ${plantillaDe(p.id, via) ? '✓ con plantilla' : 'ciclo base'}`]) : [], via ? 'Seleccione el profesional…' : 'Primero elija la vía');
+      llenar(selProf, via ? profs.filter((p) => plantillaDe(p.id, via)).map((p) => [p.id, `${p.nombre} · ${plantillaDe(p.id, via).nombre}`]) : [], via ? 'Seleccione el profesional…' : 'Primero elija la vía');
     }
-    if (!profs.length) llenar(campo('profesionalNuevo'), [], 'No hay profesionales activos (créelos en el portal)');
+    selProf.disabled = soyProfesional();
+    if (!profs.length) {
+      llenar(selProf, [], soyProfesional() ? 'No tiene plantillas aprobadas' : 'Ningún profesional tiene plantillas aprobadas');
+      llenar(campo('viaNuevo'), [], 'Sin vías disponibles');
+    }
     pintarResumenCiclo();
   }
 
@@ -313,16 +327,20 @@
     const via = campo('viaNuevo').value;
     const profId = campo('profesionalNuevo').value;
     const caja = $('#resumen-ciclo');
+    if (!cat().profesionales.some((p) => p.plantillas.length)) {
+      caja.innerHTML = 'Para crear procesos se necesita una <strong>plantilla aprobada</strong>: el profesional la registra en el portal y la gerencia la aprueba.';
+      return;
+    }
     if (!via || !profId) { caja.textContent = ''; return; }
     const pl = plantillaDe(profId, via);
-    const { v } = buscarVia(via);
-    caja.innerHTML = pl
-      ? `Se generará el ciclo con la plantilla <strong>${escapar(pl.nombre)}</strong> (${pl.tareas} tareas) de ${escapar(nombreProfesional(profId))}.`
-      : `${escapar(nombreProfesional(profId))} no tiene plantilla para esta vía: se usarán las <strong>${v ? v.etapas.length : 0} etapas normativas base</strong> y se le avisará para revisarlas.`;
+    const fecha = campo('fechaIngresoSgd').value.trim().split(' ')[0];
+    caja.innerHTML = pl ? `Se generará el ciclo con la plantilla aprobada <strong>${escapar(pl.nombre)}</strong> (${pl.tareas} tareas). Fecha de inicio: <strong>${escapar(fecha || 'hoy')}</strong>.` : '';
   }
 
   // -- proceso existente: Profesional → procesos (agrupados por categoría › vía), o Categoría → Vía → procesos
   function pintarExistente() {
+    if (soyProfesional()) campo('criterioExistente').value = 'categoria'; // solo ve sus procesos: filtra por categoría y vía
+    campo('criterioExistente').closest('label').classList.toggle('oculto', soyProfesional());
     const criterio = campo('criterioExistente').value;
     document.querySelectorAll('#bloque-existente [data-criterio]').forEach((l) => l.classList.toggle('oculto', l.dataset.criterio !== criterio));
     const procesos = cat().procesos;
@@ -343,10 +361,11 @@
       const { c: cc, v } = buscarVia(p.via);
       const g = `${cc ? cc.nombre : p.categoria} › ${v ? v.nombre : p.via}`;
       if (!grupos.has(g)) grupos.set(g, []);
-      grupos.get(g).push([p.id, `${p.codigo} · ${p.titulo}${criterio === 'categoria' ? ` — ${nombreProfesional(p.profesionalId)}` : ''}${p.estado !== 'Activo' ? ` (${p.estado})` : ''}`]);
+      const inicio = p.fechaInicio ? ` · inicio ${p.fechaInicio.split('-').reverse().join('/')}` : '';
+      grupos.get(g).push([p.id, `${p.codigo} · ${p.titulo}${inicio}${criterio === 'categoria' && !soyProfesional() ? ` — ${nombreProfesional(p.profesionalId)}` : ''}${p.estado !== 'Activo' ? ` (${p.estado})` : ''}`]);
     });
     llenar(campo('proceso'), [...grupos.entries()].sort().map(([grupo, opciones]) => ({ grupo, opciones })), filtrados.length ? 'Seleccione el proceso…' : 'Sin procesos en curso con estos criterios');
-    $('#resumen-busqueda').textContent = `${filtrados.length} proceso(s) en curso. Los procesos finalizados no se muestran porque no admiten documentos.`;
+    $('#resumen-busqueda').textContent = `${filtrados.length} proceso(s) en curso${soyProfesional() ? ' a su cargo' : ''}. Los finalizados no se muestran porque no admiten documentos.`;
     pintarTareas();
   }
 

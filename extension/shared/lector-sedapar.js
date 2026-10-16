@@ -98,6 +98,15 @@ async function leerPaginaSedapar(parametros) {
     if (control && limpiar(control.value)) return limpiar(control.value);
     const rotulo = Array.from(tarjeta.querySelectorAll('b, strong, label, th, dt, span, td, div, p')).find((el) => el.children.length === 0 && esRotulo(el));
     if (!rotulo) return null;
+    // SGD de SEDAPAR: el valor va en el primer <p class="text-muted"> que sigue al rótulo
+    // (p. ej. <label>ASUNTO</label> <p class="text-muted"> Difusión y cumplimiento… </p>),
+    // antes del siguiente rótulo (CONTENIDO, etc.).
+    const elementos = Array.from(tarjeta.querySelectorAll('*'));
+    for (const el of elementos.slice(elementos.indexOf(rotulo) + 1)) {
+      const texto = limpiar(el.textContent);
+      if (el !== rotulo && el.children.length === 0 && el.matches('label, b, strong, h4, h5, h6, th, dt') && /^[A-ZÁÉÍÓÚÑ .]{3,40}:?$/.test(texto)) break;
+      if (el.matches('p.text-muted') && texto) return texto;
+    }
     const ctl = rotulo.parentElement && rotulo.parentElement.querySelector('textarea, input:not([type=hidden])');
     if (ctl && limpiar(ctl.value)) return limpiar(ctl.value);
     if (rotulo.tagName === 'TH' || rotulo.tagName === 'TD') {

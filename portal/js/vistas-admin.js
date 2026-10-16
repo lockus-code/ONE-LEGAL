@@ -10,22 +10,32 @@
   // --------------------------------------------------------------- usuarios
   L.vistas.usuarios = {
     titulo: 'Usuarios', subtitulo: 'Cuentas y roles de acceso',
+    filtros: { texto: '', rol: '' },
     render(v) {
-      const lista = [...L.D.usuarios].sort((a, b) => a.rol.localeCompare(b.rol) || a.nombre.localeCompare(b.nombre));
+      const f = this.filtros;
+      const q = L.normal(f.texto);
+      const lista = [...L.D.usuarios].filter((u) => (!f.rol || u.rol === f.rol) && (!q || L.normal(`${u.nombre} ${u.usuario} ${u.cargo}`).includes(q)))
+        .sort((a, b) => a.rol.localeCompare(b.rol) || a.nombre.localeCompare(b.nombre));
       v.innerHTML = `
-        <div class="barra-filtros"><span class="secundario">${lista.length} usuario(s)</span><span class="espacio"></span><button class="btn btn--primario" id="btn-nuevo">+ Nuevo usuario</button></div>
+        <div class="barra-acciones"><span class="secundario">${lista.length} de ${L.D.usuarios.length} usuario(s)</span><button class="btn btn--primario" id="btn-nuevo">+ Nuevo usuario</button></div>
+        <div class="barra-filtros">
+          <label>Buscar<input type="search" id="f-texto" value="${esc(f.texto)}" placeholder="Nombre, usuario o cargo…"></label>
+          <label>Rol<select id="f-rol">${L.opciones(Object.entries(L.ROLES), f.rol, 'Todos los roles')}</select></label>
+        </div>
         <section class="tarjeta"><div class="tabla-envoltura"><table class="tabla">
           <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
-          <tbody>${lista.map((u) => `<tr>
+          <tbody>${lista.length ? '' : '<tr><td colspan="6" class="vacio">Sin coincidencias.</td></tr>'}${lista.map((u) => `<tr>
             <td><strong>${esc(u.nombre)}</strong><div class="secundario">${esc(u.cargo || '')}${u.correo ? ` · ${esc(u.correo)}` : ''}</div></td>
             <td class="mono">${esc(u.usuario)}</td>
-            <td>${esc(L.ROLES[u.rol] || u.rol)}</td>
+            <td><span class="chip chip--rol-${esc(u.rol)}">${esc(L.ROLES[u.rol] || u.rol)}</span></td>
             <td>${u.activo ? '<span class="chip chip--estado-activo">Activo</span>' : '<span class="chip">Inactivo</span>'}${u.debeCambiarClave ? ' <span class="chip chip--advertencia">Clave temporal</span>' : ''}</td>
-            <td>${L.fmtFechaHora(u.ultimoIngreso)}</td>
+            <td class="nowrap">${L.fmtFechaHora(u.ultimoIngreso)}</td>
             <td><select data-usuario="${esc(u.id)}" aria-label="Acciones">${L.opciones([['editar', 'Editar'], ['clave', 'Asignar clave temporal'], [u.activo ? 'desactivar' : 'activar', u.activo ? 'Desactivar' : 'Activar'], ['eliminar', 'Eliminar']], '', 'Acciones…')}</select></td></tr>`).join('')}</tbody>
         </table></div></section>
         <div class="aviso aviso--info"><span><strong>Roles:</strong> el <em>administrador</em> gestiona usuarios, taxonomía y base de datos; el <em>gerente</em> ve los indicadores y toda la cartera; el <em>profesional</em> gestiona sus procesos, tareas, plazos y plantillas; el <em>asistente administrativo</em> indexa trámites del SGD, registra procesos y solicita plazos.</span></div>`;
       L.$('#btn-nuevo', v).addEventListener('click', () => formUsuario(null));
+      L.$('#f-texto', v).addEventListener('input', (ev) => { f.texto = ev.target.value; L.pintar(); const x = L.$('#f-texto'); x.focus(); x.setSelectionRange(x.value.length, x.value.length); });
+      L.$('#f-rol', v).addEventListener('change', (ev) => { f.rol = ev.target.value; L.pintar(); });
       v.addEventListener('change', async (ev) => {
         const id = ev.target.dataset.usuario;
         if (!id) return;
@@ -84,20 +94,23 @@
   // -------------------------------------------------------------- taxonomía
   L.vistas.taxonomia = {
     titulo: 'Taxonomía de procesos', subtitulo: 'Categoría → vía procedimental → etapas normativas base (normativa peruana)',
+    abiertas: new Set(),
     render(v) {
       const tax = JSON.parse(JSON.stringify(L.D.taxonomia));
       const enUso = new Set([...L.D.procesos.map((p) => p.via), ...L.D.plantillas.map((p) => p.via)]);
       v.innerHTML = `
-        <div class="barra-filtros"><span class="secundario">${tax.categorias.length} categorías · ${tax.categorias.reduce((n, c) => n + c.vias.length, 0)} vías</span><span class="espacio"></span><button class="btn" id="btn-cat">+ Categoría</button></div>
-        ${tax.categorias.map((c, i) => `<section class="tarjeta">
-          <div class="tarjeta__cab"><div><h2>${esc(c.nombre)} <span class="secundario mono">${esc(c.codigo)}</span></h2><p>${esc(c.baseLegal || '')}</p></div>
-            <select data-cat="${i}" aria-label="Acciones de la categoría">${L.opciones([['editar', 'Editar categoría'], ['via', 'Agregar vía'], ['quitar', 'Quitar categoría']], '', 'Acciones…')}</select></div>
-          <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Vía procedimental</th><th>Base legal</th><th>Etapas base</th><th>Estado</th><th></th></tr></thead><tbody>
+        <div class="barra-acciones"><span class="secundario">${tax.categorias.length} categorías · ${tax.categorias.reduce((n, c) => n + c.vias.length, 0)} vías procedimentales · las etapas base sirven de punto de partida para las plantillas</span><button class="btn btn--primario" id="btn-cat">+ Categoría</button></div>
+        ${tax.categorias.map((c, i) => `<details class="categoria" ${this.abiertas.has(c.codigo) ? 'open' : ''} data-codigo="${esc(c.codigo)}">
+          <summary><div><h2>${esc(c.nombre)} <span class="secundario mono">${esc(c.codigo)}</span></h2><span class="secundario">${esc(c.baseLegal || '')}</span></div><span class="espacio"></span>
+            <span class="chip">${c.vias.length} vía(s)</span></summary>
+          <div class="barra-acciones categoria__acciones"><span class="secundario">Acciones de la categoría</span><select data-cat="${i}" aria-label="Acciones de la categoría ${esc(c.nombre)}">${L.opciones([['via', 'Agregar vía procedimental'], ['editar', 'Editar categoría'], ['quitar', 'Quitar categoría']], '', 'Acciones…')}</select></div>
+          <div class="tabla-envoltura"><table class="tabla tabla--fija"><colgroup><col class="c-via"><col class="c-base"><col class="c-etapas"><col class="c-estado"><col class="c-acc"></colgroup><thead><tr><th>Vía procedimental</th><th>Base legal</th><th>Etapas base</th><th>Estado</th><th></th></tr></thead><tbody>
           ${c.vias.map((x, j) => `<tr><td><strong>${esc(x.nombre)}</strong> <span class="secundario mono">${esc(x.codigo)}</span></td><td>${esc(x.baseLegal || '')}</td>
             <td>${x.etapas.length} (${x.etapas.filter((e) => e.plazoDias === null || e.plazoDias === undefined).length} por definir)</td>
             <td>${x.desactivada ? '<span class="chip">Desactivada</span>' : '<span class="chip chip--estado-activo">Activa</span>'}${enUso.has(x.codigo) ? ' <span class="secundario">en uso</span>' : ''}</td>
             <td><select data-via="${i}:${j}" aria-label="Acciones de la vía">${L.opciones([['etapas', 'Editar etapas y datos'], [x.desactivada ? 'activar' : 'desactivar', x.desactivada ? 'Activar' : 'Desactivar'], ...(enUso.has(x.codigo) ? [] : [['quitar', 'Quitar']])], '', 'Acciones…')}</select></td></tr>`).join('')}
-          </tbody></table></div></section>`).join('')}`;
+          </tbody></table></div></details>`).join('')}`;
+      L.$$('details.categoria', v).forEach((d) => d.addEventListener('toggle', () => { if (d.open) this.abiertas.add(d.dataset.codigo); else this.abiertas.delete(d.dataset.codigo); }));
       const guardar = async () => { try { await L.api('PUT', '/api/taxonomia', tax); L.notificar('Taxonomía guardada.'); await L.refrescar(); } catch (e) { L.error(e); } };
       const pedir = (titulo, campos, alGuardar) => {
         const c = L.modal(`${L.cabModal(titulo)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-x">${campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}<div id="editor-etapas"></div><div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`);

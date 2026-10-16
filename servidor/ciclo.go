@@ -1,37 +1,34 @@
 package main
 
-// Ciclo del proceso: generación de tareas a partir de la plantilla del
-// profesional (o de las etapas normativas base), avance de tareas, cómputo de
-// plazos y alertas.
+// Ciclo del proceso: generación de tareas a partir de la plantilla aprobada
+// del profesional, avance de tareas, cómputo de plazos y alertas.
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 )
 
-// plantillaPara busca la plantilla del profesional para la vía.
+// plantillaPara busca la plantilla APROBADA del profesional para la vía.
 func (s *Servidor) plantillaPara(profesionalID, via string) *Plantilla {
 	plantillas, _ := listar[Plantilla](s.bd, colPlantillas)
 	for i := range plantillas {
-		if plantillas[i].ProfesionalID == profesionalID && plantillas[i].Via == via {
+		if plantillas[i].ProfesionalID == profesionalID && plantillas[i].Via == via && plantillas[i].Aprobada() {
 			return &plantillas[i]
 		}
 	}
 	return nil
 }
 
-// generarCiclo crea las tareas del proceso. Devuelve las tareas creadas.
-func (s *Servidor) generarCiclo(p *Proceso, via *Via, usuario string) ([]Tarea, error) {
-	etapas := via.Etapas
-	p.CicloBase = true
-	p.PlantillaNombre = "Etapas normativas base · " + via.Nombre
-	if plt := s.plantillaPara(p.ProfesionalID, p.Via); plt != nil && len(plt.Tareas) > 0 {
-		etapas = plt.Tareas
-		p.CicloBase = false
-		p.PlantillaID = plt.ID
-		p.PlantillaNombre = plt.Nombre
-	}
+// generarCiclo crea las tareas del proceso con la versión aprobada de la plantilla del profesional.
+// Las tareas sin antecesora quedan disponibles («Por hacer») desde el inicio del proceso; las demás
+// se habilitan cuando su antecesora finaliza.
+func (s *Servidor) generarCiclo(p *Proceso, plt *Plantilla, usuario string) ([]Tarea, error) {
+	etapas := plt.TareasAprobadas
+	p.CicloBase = false
+	p.PlantillaID = plt.ID
+	p.PlantillaNombre = valorO(plt.NombreAprobado, plt.Nombre)
 	cal := s.calendario()
 	tareas := make([]Tarea, len(etapas))
 	for i, e := range etapas {
@@ -58,16 +55,14 @@ func (s *Servidor) generarCiclo(p *Proceso, via *Via, usuario string) ([]Tarea, 
 		if ant >= 0 {
 			t.AntecesoraID = tareas[ant].ID
 		}
-		// Sin antecesora: la tarea empieza con el proceso.
 		if t.AntecesoraID == "" {
-			t.Estado = TareaEnProceso
-			t.FechaInicio = p.FechaInicio
+			t.FechaInicio = p.FechaInicio // disponible desde el inicio del proceso
 		}
 		if t.PlazoDias != nil && (t.Desde == DesdeInicio || t.AntecesoraID == "") {
 			t.FechaLimite = cal.Sumar(p.FechaInicio, *t.PlazoDias, t.TipoDias)
 			t.PlazoDefinidoPor = "plantilla"
 		}
-		t.Historial = []Evento{{Fecha: ahora(), Usuario: usuario, Texto: "Tarea generada desde «" + p.PlantillaNombre + "»"}}
+		t.Historial = []Evento{{Fecha: ahora(), Usuario: usuario, Texto: "Tarea generada desde la plantilla «" + p.PlantillaNombre + "»"}}
 		tareas[i] = t
 	}
 	for _, t := range tareas {
@@ -90,24 +85,40 @@ func (s *Servidor) tareasDe(procesoID string) []Tarea {
 	return propias
 }
 
-// cambiarEstadoTarea aplica la transición y propaga el avance a las tareas sucesoras.
-func (s *Servidor) cambiarEstadoTarea(t *Tarea, estado, usuario string) ([]Tarea, error) {
+// ordenEstado: posición de cada estado en el tablero (para detectar retrocesos).
+var ordenEstado = map[string]int{TareaPendiente: 0, TareaEnProceso: 1, TareaEnRevision: 2, TareaFinalizada: 3}
+
+// cambiarEstadoTarea aplica la transición y habilita las tareas sucesoras.
+// Avanzar exige que la antecesora haya finalizado; retroceder exige una justificación.
+func (s *Servidor) cambiarEstadoTarea(t *Tarea, estado, justificacion, usuario string) ([]Tarea, error) {
 	if t.Estado == estado {
 		return nil, nil
+	}
+	if _, ok := ordenEstado[estado]; !ok {
+		return nil, fallo(http.StatusUnprocessableEntity, "Estado de tarea no válido.")
+	}
+	retroceso := ordenEstado[estado] < ordenEstado[t.Estado]
+	justificacion = strings.TrimSpace(justificacion)
+	if retroceso && justificacion == "" {
+		return nil, fallo(http.StatusUnprocessableEntity, "Para devolver la tarea a «%s» indique la justificación.", estado)
+	}
+	todas := s.tareasDe(t.ProcesoID)
+	if !retroceso && t.AntecesoraID != "" {
+		for _, a := range todas {
+			if a.ID == t.AntecesoraID && a.Estado != TareaFinalizada {
+				return nil, fallo(http.StatusConflict, "La tarea antecesora «%s» aún no finaliza.", a.Nombre)
+			}
+		}
 	}
 	cal := s.calendario()
 	anterior := t.Estado
 	t.Estado = estado
 	switch estado {
-	case TareaEnProceso:
+	case TareaEnProceso, TareaEnRevision:
 		if t.FechaInicio == "" {
 			t.FechaInicio = hoy()
 		}
 		t.FechaFin = ""
-		if t.FechaLimite == "" && t.PlazoDias != nil {
-			t.FechaLimite = cal.Sumar(t.FechaInicio, *t.PlazoDias, t.TipoDias)
-			t.PlazoDefinidoPor = "plantilla"
-		}
 	case TareaFinalizada:
 		if t.FechaInicio == "" {
 			t.FechaInicio = hoy()
@@ -116,23 +127,31 @@ func (s *Servidor) cambiarEstadoTarea(t *Tarea, estado, usuario string) ([]Tarea
 	case TareaPendiente:
 		t.FechaFin = ""
 	}
-	t.Historial = append(t.Historial, Evento{Fecha: ahora(), Usuario: usuario, Texto: fmt.Sprintf("Estado: %s → %s", anterior, estado)})
+	if t.FechaLimite == "" && t.PlazoDias != nil && t.FechaInicio != "" {
+		t.FechaLimite = cal.Sumar(t.FechaInicio, *t.PlazoDias, t.TipoDias)
+		t.PlazoDefinidoPor = "plantilla"
+	}
+	texto := fmt.Sprintf("Estado: %s → %s", anterior, estado)
+	if retroceso {
+		texto = fmt.Sprintf("Retroceso: %s → %s. Justificación: %s", anterior, estado, justificacion)
+		t.Comentarios = append(t.Comentarios, Evento{Fecha: ahora(), Usuario: usuario, Texto: "↩ " + texto})
+	}
+	t.Historial = append(t.Historial, Evento{Fecha: ahora(), Usuario: usuario, Texto: texto})
 	t.ActualizadaEn = ahora()
 
-	// Al finalizar, las sucesoras pendientes pasan a «En proceso» y su plazo empieza a correr.
+	// Al finalizar, las sucesoras quedan disponibles («Por hacer») y su plazo empieza a correr.
 	var sucesoras []Tarea
 	if estado == TareaFinalizada {
-		for _, x := range s.tareasDe(t.ProcesoID) {
+		for _, x := range todas {
 			if x.AntecesoraID != t.ID || x.Estado != TareaPendiente {
 				continue
 			}
-			x.Estado = TareaEnProceso
 			x.FechaInicio = t.FechaFin
 			if x.FechaLimite == "" && x.PlazoDias != nil {
 				x.FechaLimite = cal.Sumar(t.FechaFin, *x.PlazoDias, x.TipoDias)
 				x.PlazoDefinidoPor = "plantilla"
 			}
-			x.Historial = append(x.Historial, Evento{Fecha: ahora(), Usuario: usuario, Texto: "Inicia al concluir «" + t.Nombre + "»"})
+			x.Historial = append(x.Historial, Evento{Fecha: ahora(), Usuario: usuario, Texto: "Habilitada al finalizar «" + t.Nombre + "»"})
 			x.ActualizadaEn = ahora()
 			sucesoras = append(sucesoras, x)
 		}
@@ -157,7 +176,7 @@ type Alerta struct {
 var ordenNivel = map[string]int{"critica": 0, "alta": 1, "media": 2, "info": 3}
 
 // calcularAlertas evalúa las reglas de alerta sobre los datos visibles para el usuario.
-func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []TramiteSGD, solicitudes []Solicitud, usuarios []Usuario, cfg Configuracion, cal Calendario) []Alerta {
+func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []TramiteSGD, solicitudes []Solicitud, usuarios []Usuario, plantillas []Plantilla, cfg Configuracion, cal Calendario) []Alerta {
 	hoyISO := hoy()
 	porProceso := map[string]*Proceso{}
 	for i := range procesos {
@@ -173,7 +192,7 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 	}
 	var alertas []Alerta
 	agregar := func(a Alerta) {
-		a.ID = a.Tipo + ":" + a.TareaID + a.ProcesoID + ":" + a.ProfesionalID
+		a.ID = a.Tipo + ":" + a.TareaID + a.ProcesoID + ":" + a.ProfesionalID + ":" + a.Titulo
 		alertas = append(alertas, a)
 	}
 	etiqueta := func(p *Proceso) string { return p.Codigo + " · " + p.Titulo }
@@ -219,21 +238,22 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 			}
 			continue
 		}
-		// Plazo relativo ya definido: la fecha se calcula sola cuando la tarea empiece.
-		if t.PlazoDias != nil && t.Estado == TareaPendiente {
+		// Plazo relativo ya definido: la fecha se calcula sola cuando la tarea se habilite.
+		if t.PlazoDias != nil && t.FechaInicio == "" {
 			continue
 		}
-		// Sin plazo: se alerta cuando la antecesora está en proceso o finalizada (o la tarea ya empezó).
+		// Sin plazo: se alerta cuando la antecesora está en proceso o finalizada (o la tarea ya está habilitada).
 		ant := porTarea[t.AntecesoraID]
-		if t.Estado == TareaEnProceso || t.AntecesoraID == "" || (ant != nil && ant.Estado != TareaPendiente) {
+		habilitada := t.FechaInicio != "" || t.Estado != TareaPendiente
+		if habilitada || (ant != nil && ant.Estado != TareaPendiente) {
 			a := base
 			a.Tipo, a.Nivel = "plazo-no-definido", "media"
-			if t.Estado == TareaEnProceso {
+			if habilitada {
 				a.Nivel = "alta"
 			}
 			a.Titulo = "Plazo no definido: " + t.Nombre
-			motivo := "la tarea está en proceso"
-			if t.Estado != TareaEnProceso && ant != nil {
+			motivo := "la tarea ya está habilitada"
+			if !habilitada && ant != nil {
 				motivo = fmt.Sprintf("la tarea antecesora «%s» está %s", ant.Nombre, strings.ToLower(ant.Estado))
 			}
 			a.Detalle = fmt.Sprintf("%s · %s y aún no tiene fecha límite", etiqueta(p), motivo)
@@ -245,10 +265,6 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 		p := &procesos[i]
 		if p.Estado != ProcesoActivo {
 			continue
-		}
-		if p.CicloBase {
-			agregar(Alerta{Tipo: "sin-plantilla", Nivel: "info", ProcesoID: p.ID, ProfesionalID: p.ProfesionalID,
-				Titulo: "Ciclo generado con etapas base", Detalle: etiqueta(p) + " · el profesional no tenía plantilla propia para esta vía; revise las tareas."})
 		}
 		ultimo := ultimoMovimiento[p.ID]
 		if ultimo == "" {
@@ -303,6 +319,18 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 			}
 			agregar(Alerta{Tipo: "tramite-nuevo", Nivel: "info", ProcesoID: p.ID, TareaID: tr.TareaID, ProfesionalID: p.ProfesionalID, Fecha: tr.IndexadoEn,
 				Titulo: "Nuevo documento SGD " + tr.NroTramite, Detalle: etiqueta(p) + " · " + tr.AsuntoSGD})
+		}
+	}
+
+	// Plantillas: pendientes de aprobación (gerencia) u observadas (profesional).
+	for _, pl := range plantillas {
+		switch {
+		case pl.Estado == PlantillaPendiente && (u.Rol == RolGerente || u.Rol == RolAdmin):
+			agregar(Alerta{Tipo: "plantilla-por-aprobar", Nivel: "media", ProfesionalID: pl.ProfesionalID, Fecha: pl.ActualizadaEn,
+				Titulo: "Plantilla por aprobar: " + pl.Nombre, Detalle: fmt.Sprintf("Enviada por %s (versión %d)", nombre[pl.ProfesionalID], pl.Version)})
+		case pl.Estado == PlantillaObservada && pl.ProfesionalID == u.ID:
+			agregar(Alerta{Tipo: "plantilla-observada", Nivel: "alta", ProfesionalID: pl.ProfesionalID, Fecha: pl.ActualizadaEn,
+				Titulo: "Plantilla observada: " + pl.Nombre, Detalle: "Observación: " + valorO(pl.Observacion, "—")})
 		}
 	}
 
