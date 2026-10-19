@@ -55,21 +55,23 @@
   };
 
   L.nuevoProceso = function () {
-    const c = L.modal(`${L.cabModal('Registrar proceso', 'El código se asigna automáticamente')}
+    const c = L.modal(`${L.cabModal('Registrar proceso', 'Nuevo proceso legal')}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-proc" novalidate>
-        <div class="cascada" id="cascada"></div>
-        <label>Título o materia<input name="titulo" required placeholder="Ej.: Demanda de nulidad de resolución gerencial N.° 120-2026"></label>
-        <div class="doble">
-          <label>Fecha de inicio<input type="date" name="fechaInicio" value="${L.hoy()}"></label>
-          <label>Expediente judicial / administrativo (opcional)<input name="expedienteJudicial" placeholder="00123-2026-0-0401-JR-CI-01"></label>
+        <div class="form-columnas">
+          <div>${L.seccionForm('1 · Asignación y ciclo', '<div class="cascada" id="cascada"></div>', 'Solo se ofrecen vías con plantilla aprobada. Debajo verá las tareas que se generarán.')}</div>
+          <div>
+            ${L.seccionForm('2 · Datos del proceso', `
+              <label class="obligatorio">Título o materia<input name="titulo" required placeholder="Ej.: Demanda de nulidad de resolución gerencial N.° 120-2026">${L.ayuda('Cómo se identificará el proceso en tableros e informes.')}</label>
+              <label class="obligatorio">Fecha de inicio<input type="date" name="fechaInicio" value="${L.hoy()}">${L.ayuda('Los plazos de la plantilla se cuentan desde esta fecha.')}</label>`)}
+            ${L.seccionForm('3 · Datos judiciales o administrativos', `
+              <label>Expediente<input name="expedienteJudicial" placeholder="00123-2026-0-0401-JR-CI-01" class="mono"></label>
+              <div class="doble"><label>Órgano / juzgado<input name="organo" placeholder="1.er Juzgado Civil de Arequipa"></label>
+              <label>Contraparte<input name="contraparte" placeholder="Nombre o razón social"></label></div>
+              <label>Observaciones<textarea name="observaciones" rows="2"></textarea></label>`, 'Opcionales; puede completarlos después.')}
+          </div>
         </div>
-        <div class="doble">
-          <label>Órgano / juzgado (opcional)<input name="organo"></label>
-          <label>Contraparte (opcional)<input name="contraparte"></label>
-        </div>
-        <label>Observaciones (opcional)<textarea name="observaciones" rows="2"></textarea></label>
-        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Registrar y generar ciclo</button></div>
-      </form>`);
+        <div class="modal__pie" style="padding:0"><span class="secundario">El código se asigna automáticamente.</span><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Registrar y generar ciclo</button></div>
+      </form>`, { ancho: true });
     const cascada = L.cascadaProceso(L.$('#cascada', c));
     if (!L.$('#cascada select', c)) L.$('#f-proc button.btn--primario', c).disabled = true;
     L.$('#f-proc', c).addEventListener('submit', async (ev) => {
@@ -170,20 +172,23 @@
         await L.api('DELETE', `/api/procesos/${p.id}`);
         location.hash = '#procesos';
       } else if (a === 'reasignar') {
-        const c = L.modal(`${L.cabModal('Reasignar profesional', esc(p.codigo))}
-          <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-r"><label>Profesional<select name="p">${L.opciones(L.profesionales().map((u) => [u.id, u.nombre]), p.profesionalId)}</select></label>
-          <p class="secundario">Las tareas existentes se conservan; el nuevo profesional puede ajustarlas.</p>
-          <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Reasignar</button></div></form>`, { angosto: true });
-        L.$('#f-r', c).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await L.api('PUT', `/api/procesos/${p.id}`, { profesionalId: ev.target.p.value }); L.cerrarModal(); L.notificar('Proceso reasignado.'); await L.refrescar(); } catch (e) { L.error(e); } });
+        const carga = (u) => { const ids = new Set(L.D.procesos.filter((x) => x.profesionalId === u.id && x.estado === 'Activo').map((x) => x.id)); return { activos: ids.size, abiertas: L.D.tareas.filter((t) => ids.has(t.procesoId) && L.abierta(t)).length }; };
+        const c = L.modal(`${L.cabModal('Reasignar profesional', `${esc(p.codigo)} · ${esc(p.titulo)}`)}
+          <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-r">
+            <div class="contexto"><dl class="datos"><dt>A cargo hoy</dt><dd><strong>${esc(L.nombre(p.profesionalId))}</strong></dd><dt>Vía</dt><dd>${esc(L.nombreVia(p.via))}</dd><dt>Avance</dt><dd>${L.avanceHtml(L.avance(p.id))}</dd></dl></div>
+            ${L.seccionForm('Nuevo profesional', `<div class="opciones-rol">${L.profesionales().map((u) => { const k = carga(u); return `<label class="opcion-rol"><input type="radio" name="p" value="${esc(u.id)}" ${u.id === p.profesionalId ? 'checked' : ''}><span><strong>${esc(u.nombre)}${u.id === p.profesionalId ? ' (actual)' : ''}</strong><span>${k.activos} proceso(s) activo(s) · ${k.abiertas} tarea(s) abiertas</span></span></label>`; }).join('')}</div>`, 'La carga actual ayuda a equilibrar la distribución. Las tareas existentes se conservan.')}
+            <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Reasignar</button></div></form>`, { medio: true });
+        L.$('#f-r', c).addEventListener('submit', async (ev) => { ev.preventDefault(); try { await L.api('PUT', `/api/procesos/${p.id}`, { profesionalId: ev.target.p.value || p.profesionalId }); L.cerrarModal(); L.notificar('Proceso reasignado.'); await L.refrescar(); } catch (e) { L.error(e); } });
         return;
       } else if (a === 'editar') {
         const c = L.modal(`${L.cabModal('Datos del proceso', esc(p.codigo))}
           <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-e">
-            <label>Título<input name="titulo" value="${esc(p.titulo)}"></label>
-            <div class="doble"><label>Expediente<input name="expedienteJudicial" value="${esc(p.expedienteJudicial || '')}"></label><label>Órgano<input name="organo" value="${esc(p.organo || '')}"></label></div>
-            <label>Contraparte<input name="contraparte" value="${esc(p.contraparte || '')}"></label>
-            <label>Observaciones<textarea name="observaciones" rows="3">${esc(p.observaciones || '')}</textarea></label>
-            <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`);
+            ${L.seccionForm('Identificación', `<label class="obligatorio">Título o materia<input name="titulo" value="${esc(p.titulo)}"></label>
+              <div class="contexto"><dl class="datos"><dt>Categoría › vía</dt><dd>${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))}</dd><dt>Profesional</dt><dd>${esc(L.nombre(p.profesionalId))}</dd><dt>Inicio</dt><dd>${L.fmtFecha(p.fechaInicio)}</dd></dl></div>`)}
+            ${L.seccionForm('Datos judiciales o administrativos', `<label>Expediente<input name="expedienteJudicial" class="mono" value="${esc(p.expedienteJudicial || '')}"></label>
+              <div class="doble"><label>Órgano / juzgado<input name="organo" value="${esc(p.organo || '')}"></label><label>Contraparte<input name="contraparte" value="${esc(p.contraparte || '')}"></label></div>
+              <label>Observaciones<textarea name="observaciones" rows="3">${esc(p.observaciones || '')}</textarea></label>`)}
+            <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar cambios</button></div></form>`, { medio: true });
         L.$('#f-e', c).addEventListener('submit', async (ev) => {
           ev.preventDefault();
           const f = ev.target;
@@ -198,18 +203,33 @@
   function nuevaTarea(p) {
     const tareas = L.tareasDe(p.id);
     const c = L.modal(`${L.cabModal('Agregar tarea', esc(p.codigo))}
-      <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-t">
-        <label>Nombre<input name="nombre" required placeholder="Ej.: Absolver traslado de excepción"></label>
-        <label>Después de (antecesora)<select name="ant">${L.opciones(tareas.map((t) => [t.id, `${t.orden}. ${t.nombre} (${t.estado})`]), tareas.length ? tareas[tareas.length - 1].id : '', 'Ninguna: empieza ahora')}</select></label>
-        <div class="doble"><label>Fecha límite exacta<input type="date" name="fecha"></label><label>…o plazo en días hábiles<input type="number" min="0" name="dias"></label></div>
-        <p class="secundario">Si no conoce el plazo, déjelo vacío: LEGAL le avisará cuando la antecesora avance.</p>
-        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Agregar</button></div></form>`, { angosto: true });
+      <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-t" novalidate>
+        ${L.seccionForm('Tarea', `<label class="obligatorio">Nombre<input name="nombre" required placeholder="Ej.: Absolver traslado de excepción"></label>
+          <label>Se habilita después de<select name="ant">${L.opciones(tareas.map((t) => [t.id, `${t.orden}. ${t.nombre} · ${L.estadoTarea(t)}`]), tareas.length ? tareas[tareas.length - 1].id : '', 'Ninguna: queda disponible ahora')}</select>${L.ayuda('La tarea aparece en el tablero cuando finaliza su antecesora.')}</label>`)}
+        ${L.seccionForm('Plazo', `<div class="triple"><label>Fecha límite exacta<input type="date" name="fecha" min="${L.hoy()}"></label>
+          <label>…o plazo en días<input type="number" min="0" max="3650" name="dias" placeholder="Ej.: 5"></label>
+          <label>Tipo de días<select name="tipo">${L.opciones([['habiles', 'Hábiles'], ['calendario', 'Calendario']], 'habiles')}</select></label></div>
+          <p class="secundario" id="t-resultado"></p>`, 'Si aún no lo conoce, déjelo vacío: LEGAL alertará cuando la antecesora avance y, con más prioridad, cuando finalice sin plazo.')}
+        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Agregar tarea</button></div></form>`, { medio: true });
+    const ft = L.$('#f-t', c);
+    ft.addEventListener('input', (ev) => {
+      if (ev.target === ft.fecha && ft.fecha.value) ft.dias.value = '';
+      if (ev.target === ft.dias && ft.dias.value !== '') ft.fecha.value = '';
+      const ant = L.D.porTarea[ft.ant.value];
+      const n = parseInt(ft.dias.value, 10);
+      L.$('#t-resultado', c).textContent = ft.fecha.value ? `Vencerá el ${L.fmtFecha(ft.fecha.value)}.`
+        : Number.isNaN(n) ? 'Sin plazo: quedará «por definir».'
+          : ant && L.abierta(ant) ? `Vencerá ${n} día(s) ${ft.tipo.value === 'calendario' ? 'calendario' : 'hábiles'} después de que finalice «${ant.nombre}».`
+            : `Vencerá el ${L.fmtFecha(L.sumarDias(ant && ant.fechaFin ? ant.fechaFin : L.hoy(), n, ft.tipo.value))}.`;
+    });
+    ft.dispatchEvent(new Event('input'));
     L.$('#f-t', c).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.target;
       const cuerpo = { procesoId: p.id, nombre: f.nombre.value, antecesoraId: f.ant.value };
       if (f.fecha.value) cuerpo.fechaLimite = f.fecha.value;
-      else if (f.dias.value !== '') { cuerpo.plazoDias = parseInt(f.dias.value, 10); cuerpo.tipoDias = 'habiles'; }
+      else if (f.dias.value !== '') { cuerpo.plazoDias = parseInt(f.dias.value, 10); cuerpo.tipoDias = f.tipo.value; }
+      if (!cuerpo.nombre.trim()) { f.nombre.focus(); L.notificar('Escriba el nombre de la tarea.', 'error'); return; }
       try { await L.api('POST', '/api/tareas', cuerpo); L.cerrarModal(); L.notificar('Tarea agregada.'); await L.refrescar(); } catch (e) { L.error(e); }
     });
   }

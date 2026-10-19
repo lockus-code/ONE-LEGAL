@@ -433,12 +433,17 @@
   L.solicitarPlazo = function (tareaId) {
     const t = L.D.porTarea[tareaId];
     const p = L.D.porProceso[t.procesoId];
+    const ant = L.D.porTarea[t.antecesoraId];
     const c = L.modal(`${L.cabModal('Solicitar definición de plazo', `${esc(p.codigo)} · ${esc(L.nombre(p.profesionalId))}`)}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-sol">
-        <p>Tarea: <strong>${esc(t.nombre)}</strong></p>
-        <label>Mensaje para el profesional (opcional)<textarea name="mensaje" rows="3" placeholder="Ej.: Llegó la resolución que fija la audiencia."></textarea></label>
+        <div class="contexto"><dl class="datos">
+          <dt>Proceso</dt><dd>${esc(p.codigo)} · ${esc(p.titulo)}</dd>
+          <dt>Tarea</dt><dd><strong>${esc(t.nombre)}</strong> ${L.chipEstado(L.estadoTarea(t))}</dd>
+          <dt>Antecesora</dt><dd>${ant ? `${esc(ant.nombre)} ${L.chipEstado(L.estadoTarea(ant))}${ant.fechaFin ? ` · finalizó el ${L.fmtFecha(ant.fechaFin)}` : ''}` : '—'}</dd>
+          <dt>Profesional</dt><dd>${esc(L.nombre(p.profesionalId))}</dd></dl></div>
+        <label>Mensaje para el profesional<textarea name="mensaje" rows="4" placeholder="Ej.: Llegó la resolución que fija la audiencia para el 12 de noviembre."></textarea>${L.ayuda('Opcional. El profesional verá la solicitud en sus alertas; se cierra sola cuando define el plazo.')}</label>
         <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Enviar solicitud</button></div>
-      </form>`, { angosto: true });
+      </form>`, { medio: true });
     L.$('#f-sol', c).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {

@@ -201,11 +201,14 @@
   };
 
   /** Abre un modal. `html` incluye cabecera y cuerpo; devuelve el contenedor. */
-  L.modal = function (html, { angosto = false, ancho = false, foco = true } = {}) {
+  /** Abre un modal. Tamaños: angosto (confirmaciones), medio (formularios), normal y ancho (tablas). */
+  L.modal = function (html, { angosto = false, medio = false, ancho = false, foco = true } = {}) {
     const m = L.$('#modal');
     L.$('.modal__caja', m).classList.toggle('modal__caja--angosta', angosto);
+    L.$('.modal__caja', m).classList.toggle('modal__caja--media', medio);
     L.$('.modal__caja', m).classList.toggle('modal__caja--ancha', ancho);
     L.$('#modal-contenido').innerHTML = html;
+    L.marcarObligatorios(L.$('#modal-contenido'));
     m.hidden = false;
     L.rotularTablas(L.$('#modal-contenido'));
     const primero = foco ? L.$('#modal-contenido input, #modal-contenido select, #modal-contenido textarea') : L.$('#modal-contenido [data-cerrar]');
@@ -222,6 +225,20 @@
     if (cb) cb();
   };
   L.cabModal = (titulo, sub) => `<div class="modal__cab"><div>${sub ? `<div class="modal__clave">${sub}</div>` : ''}<h2 id="modal-titulo">${titulo}</h2></div><button type="button" class="btn-icono" data-cerrar aria-label="Cerrar">✕</button></div>`;
+
+  /** Sección de formulario con título y ayuda: ordena los campos de los modales por tema. */
+  L.seccionForm = (titulo, html, ayuda = '') => `<fieldset class="form-seccion"><legend>${titulo}</legend>${ayuda ? `<p class="form-seccion__ayuda">${ayuda}</p>` : ''}<div class="form-seccion__campos">${html}</div></fieldset>`;
+  /** Agrega el asterisco de campo obligatorio junto al texto de cada etiqueta «obligatorio». */
+  L.marcarObligatorios = (raiz) => L.$$('label.obligatorio', raiz).forEach((l) => {
+    const t = Array.from(l.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!t) return;
+    const s = document.createElement('span');
+    s.className = 'etiqueta';
+    s.innerHTML = `${L.esc(t.textContent.trim())} <span class="req" aria-hidden="true">*</span>`;
+    t.replaceWith(s);
+  });
+  /** Texto de ayuda bajo un campo. */
+  L.ayuda = (t) => `<small class="ayuda">${t}</small>`;
 
   L.opciones = (lista, actual, vacio) => `${vacio !== undefined ? `<option value="">${L.esc(vacio)}</option>` : ''}${lista.map(([v, t]) => `<option value="${L.esc(v)}" ${String(v) === String(actual ?? '') ? 'selected' : ''}>${L.esc(t)}</option>`).join('')}`;
   L.grupos = (grupos, actual, vacio) => `${vacio !== undefined ? `<option value="">${L.esc(vacio)}</option>` : ''}${grupos.filter((g) => g.opciones.length).map((g) => `<optgroup label="${L.esc(g.grupo)}">${L.opciones(g.opciones, actual)}</optgroup>`).join('')}`;

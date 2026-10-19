@@ -142,16 +142,18 @@
 
   function revisarPlantilla(p, decidir) {
     const aprobada = p.tareasAprobadas || [];
-    const tabla = (tareas) => `<table class="tabla"><thead><tr><th class="num">#</th><th>Tarea</th><th>Plazo</th><th>Desde</th></tr></thead><tbody>${tareas.map((t, i) => `<tr><td class="num">${i + 1}</td><td>${esc(t.nombre)}${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}</td><td>${plazoTxt(t)}</td><td>${t.desde === 'inicio' ? 'Inicio del proceso' : 'Fin de la antecesora'}</td></tr>`).join('')}</tbody></table>`;
+    const tabla = (tareas) => `<table class="tabla"><thead><tr><th class="num">#</th><th>Tarea</th><th>Plazo</th><th>Desde</th></tr></thead><tbody>${tareas.map((t, i) => `<tr class="${t.plazoDias === null || t.plazoDias === undefined ? 'fila-urgente' : ''}"><td class="num">${i + 1}</td><td>${esc(t.nombre)}${t.referencia ? `<div class="secundario">${esc(t.referencia)}</div>` : ''}</td><td class="nowrap">${plazoTxt(t)}</td><td>${t.desde === 'inicio' ? 'Inicio del proceso' : 'Fin de la antecesora'}</td></tr>`).join('')}</tbody></table>`;
+    const resumen = (tareas) => { const sin = tareas.filter((t) => t.plazoDias === null || t.plazoDias === undefined).length; return `<div class="editor-tareas__resumen"><span class="chip">${tareas.length} tarea(s)</span><span class="chip">${tareas.length - sin} con plazo fijo</span>${sin ? `<span class="chip chip--advertencia">${sin} por definir</span>` : ''}</div>`; };
     const c = L.modal(`${L.cabModal(esc(p.nombre), `${esc(L.nombre(p.profesionalId))} · ${esc(L.nombreCategoria(p.categoria))} › ${esc(L.nombreVia(p.via))} · ${chipPlantilla(p)}`)}
       <div class="modal__cuerpo modal__cuerpo--simple">
         <div class="${aprobada.length && p.estado !== 'aprobada' ? 'rejilla rejilla--2' : ''}">
-          <section><h3 class="subtitulo">${p.estado === 'aprobada' ? 'Versión aprobada' : `Versión propuesta (v${p.version})`}</h3><div class="tabla-envoltura">${tabla(p.tareas)}</div></section>
-          ${aprobada.length && p.estado !== 'aprobada' ? `<section><h3 class="subtitulo">Versión aprobada vigente</h3><div class="tabla-envoltura">${tabla(aprobada)}</div></section>` : ''}
+          ${L.seccionForm(p.estado === 'aprobada' ? 'Versión aprobada' : `Versión propuesta (v${p.version})`, `${resumen(p.tareas)}<div class="tabla-envoltura">${tabla(p.tareas)}</div>`)}
+          ${aprobada.length && p.estado !== 'aprobada' ? L.seccionForm('Versión aprobada vigente', `${resumen(aprobada)}<div class="tabla-envoltura">${tabla(aprobada)}</div>`) : ''}
         </div>
         ${p.aprobadaPor ? `<p class="secundario">Última aprobación: ${esc(p.aprobadaPor)} · ${L.fmtFechaHora(p.aprobadaEn)}</p>` : ''}
+        ${p.observacion && p.estado === 'observada' ? `<div class="nota">Observación anterior: ${esc(p.observacion)}</div>` : ''}
         ${decidir ? `<form id="f-rev" class="formulario formulario--revision">
-          <label>Observación (obligatoria para observar; opcional al aprobar)<textarea name="obs" rows="3" placeholder="Ej.: Defina el plazo de la etapa de alegatos."></textarea></label>
+          <label>Observación${L.ayuda('Obligatoria para observar; opcional al aprobar. El profesional la verá en sus alertas.')}<textarea name="obs" rows="3" placeholder="Ej.: Defina el plazo de la etapa de alegatos."></textarea></label>
           <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button type="button" class="btn" data-decision="observar">Observar</button><button type="button" class="btn btn--primario" data-decision="aprobar">Aprobar</button></div>
         </form>` : ''}
       </div>`, { ancho: Boolean(aprobada.length && p.estado !== 'aprobada') });
@@ -172,15 +174,16 @@
     const st = { categoria: (p && p.categoria) || '', via: (p && p.via) || '', profesionalId: (p && p.profesionalId) || (esAdmin ? '' : L.yo().id) };
     const c = L.modal(`${L.cabModal(nueva ? 'Nueva plantilla' : 'Editar plantilla', nueva ? 'Una plantilla por vía procedimental' : esc(L.nombreVia(p.via)))}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-plt" novalidate>
-        ${esAdmin ? `<label>Profesional<select name="prof" ${nueva ? '' : 'disabled'}>${L.opciones(L.profesionales().map((u) => [u.id, u.nombre]), st.profesionalId, 'Seleccione…')}</select></label>` : ''}
-        <div class="campos-linea">
-          <label>Categoría<select name="categoria" ${nueva ? '' : 'disabled'}>${L.opciones(L.categorias().map((x) => [x.codigo, x.nombre]), st.categoria, 'Seleccione…')}</select></label>
-          <label>Vía procedimental<select name="via" ${nueva ? '' : 'disabled'}></select></label>
-          <label>Nombre de la plantilla<input name="nombre" value="${esc((p && p.nombre) || '')}" placeholder="Por defecto, el nombre de la vía"></label>
-        </div>
-        <div class="barra-acciones barra-acciones--editor"><h3 class="subtitulo">Ciclo de tareas</h3>
+        ${L.seccionForm('1 · Vía procedimental', `
+          ${esAdmin ? `<label class="obligatorio">Profesional<select name="prof" ${nueva ? '' : 'disabled'}>${L.opciones(L.profesionales().map((u) => [u.id, u.nombre]), st.profesionalId, 'Seleccione…')}</select></label>` : ''}
+          <div class="campos-linea">
+            <label class="obligatorio">Categoría<select name="categoria" ${nueva ? '' : 'disabled'}>${L.opciones(L.categorias().map((x) => [x.codigo, x.nombre]), st.categoria, 'Seleccione…')}</select></label>
+            <label class="obligatorio">Vía procedimental<select name="via" ${nueva ? '' : 'disabled'}></select>${L.ayuda('Al elegirla se cargan sus etapas normativas base.')}</label>
+            <label>Nombre de la plantilla<input name="nombre" value="${esc((p && p.nombre) || '')}" placeholder="Por defecto, el nombre de la vía"></label>
+          </div>`, nueva ? 'Una plantilla por vía. Solo la versión aprobada por la gerencia genera procesos.' : 'La categoría y la vía no cambian al editar.')}
+        ${L.seccionForm('2 · Ciclo de tareas', `<div class="barra-acciones barra-acciones--editor"><span class="secundario">Ajuste el orden, los plazos y la base legal de cada tarea.</span>
           <select id="cargar" aria-label="Cargar tareas">${L.opciones([['base', 'Reemplazar por las etapas normativas base de la vía'], ...L.D.plantillas.filter((x) => !p || x.id !== p.id).map((x) => [x.id, `Copiar tareas de «${x.nombre}»${esAdmin ? ` (${L.nombre(x.profesionalId)})` : ''}`])], '', 'Cargar tareas desde…')}</select></div>
-        <div id="editor"></div>
+          <div id="editor"></div>`)}
         <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar y enviar a aprobación</button></div>
       </form>`, { ancho: true });
     const f = L.$('#f-plt', c);

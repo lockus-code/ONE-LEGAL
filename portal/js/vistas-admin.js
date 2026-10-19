@@ -55,39 +55,73 @@
     }
   };
 
+  const DESCRIPCION_ROL = {
+    admin: 'Usuarios, taxonomía, configuración y base de datos.',
+    gerente: 'Tablero institucional, toda la cartera, alertas y aprobación de plantillas.',
+    profesional: 'Sus procesos, tablero de tareas, plazos y plantillas.',
+    asistente: 'Indexa trámites del SGD, registra procesos y solicita plazos.'
+  };
+  /** Clave temporal legible de 10 caracteres (sin 0/O ni 1/l). */
+  const claveAleatoria = () => { const x = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; const a = new Uint32Array(10); crypto.getRandomValues(a); return Array.from(a, (n) => x[n % x.length]).join(''); };
+  const campoClave = (nombre, etiqueta) => `<label class="obligatorio">${etiqueta}
+      <span class="campo-con-boton"><input name="${nombre}" type="text" autocomplete="off" minlength="8" required spellcheck="false" class="mono"><button type="button" class="btn btn--sm" data-generar="${nombre}">Generar</button></span>
+      ${L.ayuda('Mínimo 8 caracteres. Entréguela al usuario: deberá cambiarla en su primer ingreso.')}</label>`;
+
   function formUsuario(u) {
-    const c = L.modal(`${L.cabModal(u ? 'Editar usuario' : 'Nuevo usuario')}
+    const rol = u ? u.rol : 'profesional';
+    const c = L.modal(`${L.cabModal(u ? 'Editar usuario' : 'Nuevo usuario', u ? `${esc(u.usuario)} · ${esc(L.ROLES[u.rol] || u.rol)}` : 'Cuenta de acceso al portal y a la extensión')}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-u" novalidate>
-        <div class="doble"><label>Nombre completo<input name="nombre" required value="${esc(u ? u.nombre : '')}" placeholder="Abg. Ana Torres Medina"></label>
-        <label>Usuario<input name="usuario" required value="${esc(u ? u.usuario : '')}" ${u ? 'disabled' : ''} placeholder="atorres" autocomplete="off"></label></div>
-        <div class="doble"><label>Rol<select name="rol">${L.opciones(Object.entries(L.ROLES), u ? u.rol : 'profesional')}</select></label>
-        <label>Cargo<input name="cargo" value="${esc(u ? u.cargo || '' : '')}" placeholder="Especialista legal"></label></div>
-        <label>Correo (opcional)<input name="correo" type="email" value="${esc(u ? u.correo || '' : '')}"></label>
-        ${u ? '' : '<label>Clave temporal (mín. 8 caracteres; se pedirá cambiarla)<input name="clave" type="text" autocomplete="off" required></label>'}
-        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div>
-      </form>`, { angosto: true });
-    L.$('#f-u', c).addEventListener('submit', async (ev) => {
+        ${L.seccionForm('Datos de la persona', `
+          <label class="obligatorio">Nombre completo<input name="nombre" required value="${esc(u ? u.nombre : '')}" placeholder="Abg. Ana Torres Medina">${L.ayuda('Tal como debe aparecer en procesos, alertas e informes.')}</label>
+          <div class="doble"><label>Cargo<input name="cargo" value="${esc(u ? u.cargo || '' : '')}" placeholder="Especialista legal"></label>
+          <label>Correo institucional (opcional)<input name="correo" type="email" value="${esc(u ? u.correo || '' : '')}" placeholder="atorres@entidad.gob.pe"></label></div>`)}
+        ${L.seccionForm('Rol en LEGAL', `<div class="opciones-rol" role="radiogroup" aria-label="Rol">${Object.entries(L.ROLES).map(([k, t]) => `
+          <label class="opcion-rol"><input type="radio" name="rol" value="${k}" ${k === rol ? 'checked' : ''}><span><strong>${esc(t)}</strong><span>${esc(DESCRIPCION_ROL[k] || '')}</span></span></label>`).join('')}</div>`, 'Define lo que la persona ve y puede hacer.')}
+        ${L.seccionForm('Acceso', `
+          <label class="${u ? '' : 'obligatorio'}">Usuario<input name="usuario" required value="${esc(u ? u.usuario : '')}" ${u ? 'disabled' : ''} placeholder="atorres" autocomplete="off" spellcheck="false">${L.ayuda(u ? 'El usuario no se puede cambiar.' : 'Sin espacios; se usa para ingresar al portal y a la extensión.')}</label>
+          ${u ? `<p class="secundario">Para restablecer su contraseña use <strong>Asignar clave temporal</strong> en las acciones del usuario.</p>` : campoClave('clave', 'Clave temporal')}`)}
+        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">${u ? 'Guardar cambios' : 'Crear usuario'}</button></div>
+      </form>`, { medio: true });
+    const f = L.$('#f-u', c);
+    enlazarGenerar(f);
+    if (!u) f.nombre.addEventListener('input', () => {
+      // Propone el usuario a partir del nombre (inicial + primer apellido) mientras no se haya escrito uno.
+      if (f.usuario.dataset.tocado) return;
+      const partes = L.normal(f.nombre.value).replace(/\b(abg|dr|dra|lic|ing)\.?\s*/g, '').split(/\s+/).filter(Boolean);
+      f.usuario.value = partes.length > 1 ? `${partes[0][0]}${partes[1]}`.replace(/[^a-z0-9]/g, '') : (partes[0] || '');
+    });
+    f.usuario.addEventListener('input', () => { f.usuario.dataset.tocado = '1'; });
+    f.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const f = ev.target;
-      const cuerpo = { nombre: f.nombre.value, rol: f.rol.value, cargo: f.cargo.value, correo: f.correo.value };
+      const cuerpo = { nombre: f.nombre.value.trim(), rol: f.rol.value, cargo: f.cargo.value, correo: f.correo.value };
+      if (!cuerpo.nombre) { f.nombre.focus(); L.notificar('Escriba el nombre completo.', 'error'); return; }
+      if (!u && (!f.usuario.value.trim() || f.clave.value.length < 8)) { L.notificar('Indique el usuario y una clave temporal de al menos 8 caracteres.', 'error'); return; }
       try {
         if (u) await L.api('PUT', `/api/usuarios/${u.id}`, cuerpo);
-        else await L.api('POST', '/api/usuarios', { ...cuerpo, usuario: f.usuario.value, clave: f.clave.value });
+        else await L.api('POST', '/api/usuarios', { ...cuerpo, usuario: f.usuario.value.trim(), clave: f.clave.value });
         L.cerrarModal();
-        L.notificar('Usuario guardado.');
+        L.notificar(u ? 'Usuario actualizado.' : `Usuario creado. Entregue la clave temporal a ${cuerpo.nombre}.`);
         await L.refrescar();
       } catch (e) { L.error(e); }
     });
   }
 
+  function enlazarGenerar(f) {
+    L.$$('[data-generar]', f).forEach((b) => b.addEventListener('click', () => { const i = f[b.dataset.generar]; i.value = claveAleatoria(); i.focus(); i.select(); }));
+  }
+
   function formClave(u) {
-    const c = L.modal(`${L.cabModal('Clave temporal', esc(u.nombre))}
-      <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-c"><label>Nueva clave temporal (mín. 8)<input name="clave" autocomplete="off"></label>
-      <p class="secundario">Se cerrarán sus sesiones y deberá cambiarla al ingresar.</p>
-      <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Asignar</button></div></form>`, { angosto: true });
-    L.$('#f-c', c).addEventListener('submit', async (ev) => {
+    const c = L.modal(`${L.cabModal('Asignar clave temporal', `${esc(u.nombre)} · ${esc(u.usuario)}`)}
+      <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-c" novalidate>
+        <div class="aviso aviso--alerta"><span>Se cerrarán todas sus sesiones abiertas y deberá cambiar la clave al ingresar.</span></div>
+        ${campoClave('clave', 'Nueva clave temporal')}
+        <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Asignar clave</button></div></form>`, { medio: true });
+    const f = L.$('#f-c', c);
+    enlazarGenerar(f);
+    f.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      try { await L.api('PUT', `/api/usuarios/${u.id}`, { clave: ev.target.clave.value, cargo: u.cargo, correo: u.correo }); L.cerrarModal(); L.notificar('Clave temporal asignada.'); await L.refrescar(); } catch (e) { L.error(e); }
+      if (f.clave.value.length < 8) { L.notificar('La clave debe tener al menos 8 caracteres.', 'error'); return; }
+      try { await L.api('PUT', `/api/usuarios/${u.id}`, { clave: f.clave.value, cargo: u.cargo, correo: u.correo }); L.cerrarModal(); L.notificar('Clave temporal asignada.'); await L.refrescar(); } catch (e) { L.error(e); }
     });
   }
 
@@ -113,11 +147,15 @@
       L.$$('details.categoria', v).forEach((d) => d.addEventListener('toggle', () => { if (d.open) this.abiertas.add(d.dataset.codigo); else this.abiertas.delete(d.dataset.codigo); }));
       const guardar = async () => { try { await L.api('PUT', '/api/taxonomia', tax); L.notificar('Taxonomía guardada.'); await L.refrescar(); } catch (e) { L.error(e); } };
       const pedir = (titulo, campos, alGuardar, conEtapas = false) => {
-        const c = L.modal(`${L.cabModal(titulo)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-x">${conEtapas ? `<div class="campos-linea">${campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}</div><h3 class="subtitulo">Etapas normativas base</h3>` : campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}<div id="editor-etapas"></div><div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`, { ancho: conEtapas, angosto: !conEtapas });
+        const campo = ([k, t, val, dis, ayuda]) => `<label class="${k === 'baseLegal' ? '' : 'obligatorio'}">${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''} ${k === 'baseLegal' ? '' : 'required'}>${ayuda ? L.ayuda(ayuda) : ''}</label>`;
+        const c = L.modal(`${L.cabModal(titulo, conEtapas ? 'Las etapas base son el punto de partida de las plantillas de los profesionales' : 'Agrupa vías procedimentales de una misma materia')}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-x" novalidate>
+          ${L.seccionForm(conEtapas ? 'Datos de la vía' : 'Datos de la categoría', conEtapas ? `<div class="campos-linea">${campos.map(campo).join('')}</div>` : campos.map(campo).join(''))}
+          ${conEtapas ? L.seccionForm('Etapas normativas base', '<div id="editor-etapas"></div>', 'Orden, plazo y base legal de cada etapa. Deje el plazo vacío si se fija durante el proceso.') : '<div id="editor-etapas" hidden></div>'}
+          <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`, { ancho: conEtapas, medio: !conEtapas });
         return { c, f: L.$('#f-x', c), alGuardar };
       };
       L.$('#btn-cat', v).addEventListener('click', () => {
-        const { f } = pedir('Nueva categoría', [['codigo', 'Código (p. ej. FAM)'], ['nombre', 'Nombre'], ['baseLegal', 'Base legal']]);
+        const { f } = pedir('Nueva categoría', [['codigo', 'Código', '', false, 'Corto y en mayúsculas, p. ej. FAM. No se puede cambiar después.'], ['nombre', 'Nombre', '', false, 'P. ej. Familia'], ['baseLegal', 'Base legal', '', false, 'Norma principal, p. ej. Código Civil, Libro III']]);
         f.addEventListener('submit', (ev) => { ev.preventDefault(); tax.categorias.push({ codigo: f.codigo.value.trim().toUpperCase(), nombre: f.nombre.value.trim(), baseLegal: f.baseLegal.value.trim(), vias: [] }); L.cerrarModal(); guardar(); });
       });
       v.addEventListener('change', async (ev) => {
@@ -141,7 +179,7 @@
         }
       });
       function editarVia(c, x) {
-        const { f, c: caja } = pedir(x ? 'Editar vía procedimental' : `Nueva vía en ${c.nombre}`, [['codigo', 'Código (p. ej. CIV-XYZ)', x && x.codigo, Boolean(x)], ['nombre', 'Nombre', x && x.nombre], ['baseLegal', 'Base legal', x && x.baseLegal]], null, true);
+        const { f, c: caja } = pedir(x ? 'Editar vía procedimental' : `Nueva vía en ${c.nombre}`, [['codigo', 'Código', x && x.codigo, Boolean(x), x ? 'No se puede cambiar.' : 'P. ej. CIV-XYZ'], ['nombre', 'Nombre', x && x.nombre], ['baseLegal', 'Base legal', x && x.baseLegal, false, 'P. ej. CPC arts. 475-485']], null, true);
         const editor = L.editorTareas(L.$('#editor-etapas', caja), x ? x.etapas : []);
         f.addEventListener('submit', (ev) => {
           ev.preventDefault();
@@ -197,9 +235,14 @@
       const editarDoc = (clave, valor) => {
         const c = L.modal(`${L.cabModal(clave ? `${esc(col)} / ${esc(clave)}` : `Nuevo documento en ${esc(col)}`, 'Edición manual: el JSON se guarda tal cual')}
           <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-doc-ed">
-            ${clave ? '' : '<label>Clave<input name="clave" required></label>'}
-            <label>Documento (JSON)<textarea name="json" rows="18" class="mono" spellcheck="false">${esc(JSON.stringify(valor, null, 2))}</textarea></label>
-            <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar documento</button></div></form>`);
+            <div class="aviso aviso--alerta"><span>Edición directa de la base de datos: un cambio incorrecto puede dejar datos inconsistentes. Descargue un respaldo antes.</span></div>
+            ${clave ? '' : `<label class="obligatorio">Clave del documento<input name="clave" required class="mono">${L.ayuda('Identificador único dentro de la colección.')}</label>`}
+            <label>Documento (JSON)<textarea name="json" rows="22" class="mono" spellcheck="false">${esc(JSON.stringify(valor, null, 2))}</textarea><small class="ayuda" id="json-estado"></small></label>
+            <div class="modal__pie" style="padding:0"><button type="button" class="btn" id="json-formato">Dar formato</button><span class="espacio"></span><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar documento</button></div></form>`, { ancho: true });
+        const ta = L.$('textarea[name=json]', c), estado = L.$('#json-estado', c);
+        const validar = () => { try { JSON.parse(ta.value); estado.textContent = '✓ JSON válido'; estado.className = 'ayuda ayuda--ok'; return true; } catch (e) { estado.textContent = `JSON no válido: ${e.message}`; estado.className = 'ayuda ayuda--error'; return false; } };
+        ta.addEventListener('input', validar); validar();
+        L.$('#json-formato', c).addEventListener('click', () => { if (validar()) ta.value = JSON.stringify(JSON.parse(ta.value), null, 2); });
         L.$('#f-doc-ed', c).addEventListener('submit', async (ev) => {
           ev.preventDefault();
           let doc;

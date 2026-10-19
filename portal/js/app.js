@@ -52,14 +52,25 @@
   L.alExpirar = () => { detenerSincronizacion(); L.cerrarModal(); mostrarIngreso('La sesión expiró. Vuelva a ingresar.'); };
 
   function cambiarClave(obligatorio) {
-    const c = L.modal(`${L.cabModal(obligatorio ? 'Cambie su contraseña' : 'Cambiar contraseña', obligatorio ? 'Es su primer ingreso o tiene una clave temporal' : '')}
+    const c = L.modal(`${L.cabModal(obligatorio ? 'Cambie su contraseña' : 'Cambiar contraseña', obligatorio ? 'Es su primer ingreso o tiene una clave temporal' : esc(L.yo().usuario))}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-clave" novalidate>
-        <label>Contraseña actual<input type="password" name="actual" autocomplete="current-password"></label>
-        <label>Nueva contraseña (mín. 8 caracteres)<input type="password" name="nueva" autocomplete="new-password"></label>
-        <label>Repita la nueva contraseña<input type="password" name="repite" autocomplete="new-password"></label>
-        <div class="modal__pie" style="padding:0">${obligatorio ? '<button type="button" class="btn" id="btn-salir-clave">Cerrar sesión</button>' : '<button type="button" class="btn" data-cerrar>Cancelar</button>'}<button class="btn btn--primario">Guardar</button></div>
-      </form>`, { angosto: true });
-    if (obligatorio) { $('#modal').dataset.bloqueado = '1'; $('#btn-salir-clave', c).addEventListener('click', salir); }
+        ${obligatorio ? '<div class="aviso aviso--info"><span>Por seguridad, defina una contraseña personal antes de continuar.</span></div>' : ''}
+        ${L.seccionForm('Contraseña actual', `<label class="obligatorio">${obligatorio ? 'Clave temporal recibida' : 'Contraseña actual'}<input type="password" name="actual" autocomplete="current-password"></label>`)}
+        ${L.seccionForm('Nueva contraseña', `
+          <label class="obligatorio">Nueva contraseña<input type="password" name="nueva" autocomplete="new-password"></label>
+          <label class="obligatorio">Repita la nueva contraseña<input type="password" name="repite" autocomplete="new-password"></label>
+          <ul class="requisitos" id="requisitos"><li data-r="largo">Al menos 8 caracteres</li><li data-r="distinta">Distinta de la actual</li><li data-r="igual">Ambas coinciden</li></ul>
+          <label class="check"><input type="checkbox" id="ver-claves"> Mostrar contraseñas</label>`)}
+        <div class="modal__pie" style="padding:0">${obligatorio ? '<button type="button" class="btn" id="btn-salir-clave">Cerrar sesión</button>' : '<button type="button" class="btn" data-cerrar>Cancelar</button>'}<button class="btn btn--primario">Guardar contraseña</button></div>
+      </form>`, { medio: true });
+    if (obligatorio) { $('#modal').dataset.bloqueado = '1'; $('#btn-salir-clave', c).addEventListener('click', salir); const x = $('.modal__cab [data-cerrar]', c); if (x) x.hidden = true; }
+    const fc = $('#f-clave', c);
+    const revisar = () => {
+      const r = { largo: fc.nueva.value.length >= 8, distinta: fc.nueva.value && fc.nueva.value !== fc.actual.value, igual: fc.nueva.value && fc.nueva.value === fc.repite.value };
+      L.$$('#requisitos li', c).forEach((li) => li.classList.toggle('cumple', Boolean(r[li.dataset.r])));
+    };
+    fc.addEventListener('input', revisar);
+    $('#ver-claves', c).addEventListener('change', (ev) => L.$$('input[type=password], input[data-clave]', fc).forEach((i) => { i.dataset.clave = '1'; i.type = ev.target.checked ? 'text' : 'password'; }));
     $('#f-clave', c).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.target;

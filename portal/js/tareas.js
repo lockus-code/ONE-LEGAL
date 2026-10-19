@@ -47,11 +47,11 @@
       const caja = document.createElement('div');
       caja.className = 'modal modal--confirmacion';
       caja.innerHTML = `<div class="modal__fondo" data-x></div>
-        <form class="modal__caja modal__caja--angosta" role="dialog" aria-modal="true" aria-labelledby="just-t">
-          <div class="modal__cab"><div><div class="modal__clave">Retroceso de tarea</div><h2 id="just-t">${esc(t.nombre)}</h2></div></div>
+        <form class="modal__caja modal__caja--media" role="dialog" aria-modal="true" aria-labelledby="just-t">
+          <div class="modal__cab"><div><div class="modal__clave">Retroceso de tarea · ${esc((L.D.porProceso[t.procesoId] || {}).codigo || '')}</div><h2 id="just-t">${esc(t.nombre)}</h2></div><button type="button" class="btn-icono" data-x aria-label="Cerrar">✕</button></div>
           <div class="modal__cuerpo modal__cuerpo--simple formulario">
-            <p>Pasará de <strong>${esc(COLUMNAS[t.estado])}</strong> a <strong>${esc(COLUMNAS[estado])}</strong>. Indique el motivo; quedará en los comentarios de la tarea.</p>
-            <label>Justificación<textarea name="j" rows="3" required placeholder="Ej.: El escrito fue observado por el juzgado y debe subsanarse."></textarea></label>
+            <div class="transicion">${L.chipEstado(COLUMNAS[t.estado])}<span aria-hidden="true">→</span>${L.chipEstado(COLUMNAS[estado])}</div>
+            <label class="obligatorio">Justificación<textarea name="j" rows="4" required placeholder="Ej.: El escrito fue observado por el juzgado y debe subsanarse."></textarea>${L.ayuda('Quedará en los comentarios y el historial de la tarea, y la gerencia recibirá un aviso.')}</label>
             <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-x>Cancelar</button><button class="btn btn--primario">Devolver tarea</button></div>
           </div></form>`;
       document.body.appendChild(caja);
@@ -225,10 +225,12 @@
         <aside class="tarea__lateral">
           <label>Estado<select id="t-estado" ${editable && habilitada ? '' : 'disabled'}>${L.opciones(L.ESTADOS_TAREA.map((e) => [e, COLUMNAS[e]]), t.estado)}</select></label>
           <div class="campo-lateral"><span>Plazo</span>${chipPlazo(t)}${solicitada ? '<span class="chip chip--advertencia">Plazo solicitado</span>' : ''}</div>
-          ${editable && L.abierta(t) ? `<label>Fecha límite<input type="date" id="t-fecha" value="${esc(t.fechaLimite || '')}" min="${esc(t.fechaInicio || '')}"></label>
-            <div class="doble-mini"><label>o días<input type="number" min="0" max="3650" id="t-dias" value="${t.plazoDias ?? ''}"></label>
+          ${editable && L.abierta(t) ? `<div class="plazo-editor"><span>Definir o cambiar el plazo</span>
+            <label>Fecha límite exacta<input type="date" id="t-fecha" value="${esc(t.fechaLimite || '')}" min="${esc(t.fechaInicio || '')}"></label>
+            <div class="doble-mini"><label>…o días<input type="number" min="0" max="3650" id="t-dias" value="${t.plazoDias ?? ''}"></label>
             <label>Tipo<select id="t-tipo">${L.opciones([['habiles', 'hábiles'], ['calendario', 'calendario']], t.tipoDias)}</select></label></div>
-            <button type="button" class="btn btn--sm" id="t-plazo">Aplicar plazo</button><p class="secundario" id="t-previo"></p>` : ''}
+            <p class="secundario" id="t-previo"></p>
+            <button type="button" class="btn btn--sm" id="t-plazo">Aplicar plazo en días</button></div>` : ''}
           ${!editable && L.abierta(t) && !t.fechaLimite && !solicitada && L.es('asistente', 'gerente', 'admin') && p.estado === 'Activo' ? '<button type="button" class="btn btn--sm" id="t-solicitar">Solicitar definición de plazo</button>' : ''}
           <div class="campo-lateral"><span>Color</span><div class="colores">${L.COLORES.map(([hex, n]) => `<button type="button" class="color ${(t.color || '') === hex ? 'color--activo' : ''}" data-color="${hex}" style="--c:${hex || 'var(--superficie)'}" title="${n}" aria-label="${n}" ${dis}></button>`).join('')}</div></div>
           <dl class="datos">
@@ -242,7 +244,7 @@
           ${docs.length ? `<div class="campo-lateral"><span>Documentos del SGD</span>${docs.map((d) => `<a class="doc-sgd" href="${esc(d.enlaceSgd)}" target="_blank" rel="noopener"><span class="mono">${esc(d.nroTramite)}</span> ${esc(d.asuntoSgd)}</a>`).join('')}</div>` : ''}
           ${editable ? '<button type="button" class="btn btn--sm btn-texto-peligro" id="t-eliminar">Eliminar tarea</button>' : ''}
         </aside>
-      </div>`, { foco: false });
+      </div>`, { foco: false, ancho: true });
 
     const guardar = async (cuerpo, mensaje) => {
       try {
