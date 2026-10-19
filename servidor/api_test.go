@@ -12,170 +12,385 @@ import (
 	"time"
 )
 
-func servidorDePrueba(t *testing.T) http.Handler {
+type cliente struct {
+	t     *testing.T
+	h     http.Handler
+	token string
+}
+
+func entorno(t *testing.T) (*Servidor, *cliente) {
 	t.Helper()
 	bd, err := abrirBD(filepath.Join(t.TempDir(), "prueba.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { bd.Cerrar() })
-	anio := time.Now().Year()
-	semilla := Catalogo{
-		Categorias:   []Categoria{{Codigo: "ARB", Nombre: "Arbitraje y Controversias", Procedimientos: []string{"Arbitraje de Derecho"}}},
-		Responsables: []Responsable{{Codigo: "R02", Nombre: "Abg. Luis Alberto Paredes Vela"}},
-		Procesos: []Proceso{
-			{Codigo: codigo(anio, 4), Denominacion: "Arbitraje en curso", Categoria: "Arbitraje y Controversias", Procedimiento: "Arbitraje de Derecho", Responsable: "R02", Estado: "En trámite"},
-			{Codigo: codigo(anio, 6), Denominacion: "Conciliación concluida", Categoria: "Arbitraje y Controversias", Procedimiento: "Arbitraje de Derecho", Responsable: "R02", Estado: estadoFinalizado},
-		},
-	}
 	web, _ := fs.Sub(webEmbebido, "web")
-	s := &Servidor{bd: bd, semilla: semilla, web: web, base: "http://localhost:8790/", iniciado: time.Now()}
-	return s.Rutas()
-}
-
-func codigo(anio, n int) string { return "PL-" + itoa(anio) + "-" + pad4(n) }
-func itoa(n int) string          { b, _ := json.Marshal(n); return string(b) }
-func pad4(n int) string          { s := itoa(n); return strings.Repeat("0", 4-len(s)) + s }
-
-func tramite(id, modo, proceso string) map[string]any {
-	return map[string]any{
-		"id": id, "nroExpediente": "2026-0048213", "asunto": "Solicita ampliación de plazo",
-		"enlaceSgd": "http://localhost:8790/sgd-simulado/detalle.html?id=1", "asuntoVinculacion": "Se incorpora para evaluación",
-		"vinculacion": map[string]any{"modo": modo, "procesoCodigo": proceso},
+	cfg := Config{Puerto: 8790, URLPublica: "http://192.168.1.10:8790", SGDURLs: []string{"https://sgd.sedapar.com.pe/"}, SGDSimulado: true, AdminUsuario: "admin", AdminClave: "admin", SesionHoras: 1}
+	s := &Servidor{bd: bd, cfg: cfg, web: web, version: "prueba", iniciado: time.Now()}
+	if err := s.inicializar(); err != nil {
+		t.Fatal(err)
 	}
+	c := &cliente{t: t, h: s.Rutas()}
+	// El administrador inicial debe cambiar la clave antes de operar.
+	c.ingresar("admin", "admin")
+	if cod, _ := c.llamar("POST", "/api/usuarios", map[string]any{"usuario": "x", "nombre": "X", "rol": RolAsistente, "clave": "12345678"}); cod != http.StatusForbidden {
+		t.Fatalf("el administrador con clave inicial no debía poder operar: %d", cod)
+	}
+	if cod, r := c.llamar("POST", "/api/sesion/clave", map[string]any{"actual": "admin", "nueva": "Admin-2026!"}); cod != http.StatusOK {
+		t.Fatalf("cambio de clave: %d %v", cod, r)
+	}
+	return s, c
 }
 
-func llamar(t *testing.T, h http.Handler, metodo, ruta string, cuerpo any) (int, map[string]any) {
-	t.Helper()
+func (c *cliente) llamar(metodo, ruta string, cuerpo any) (int, map[string]any) {
+	c.t.Helper()
 	var buf bytes.Buffer
 	if cuerpo != nil {
 		json.NewEncoder(&buf).Encode(cuerpo)
 	}
 	req := httptest.NewRequest(metodo, ruta, &buf)
 	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
+	c.h.ServeHTTP(rec, req)
 	var res map[string]any
 	json.Unmarshal(rec.Body.Bytes(), &res)
 	return rec.Code, res
 }
 
-func TestAnexarAProcesoEnCurso(t *testing.T) {
-	h := servidorDePrueba(t)
-	anio := time.Now().Year()
-	cod, res := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T1", "anexo", codigo(anio, 4))})
+func (c *cliente) ingresar(usuario, clave string) {
+	c.t.Helper()
+	c.token = ""
+	cod, r := c.llamar("POST", "/api/sesion", map[string]any{"usuario": usuario, "clave": clave, "origen": "extension"})
+	if cod != http.StatusOK {
+		c.t.Fatalf("ingreso de %s: %d %v", usuario, cod, r)
+	}
+	c.token = r["token"].(string)
+}
+
+func (c *cliente) como(usuario, clave string) *cliente {
+	otro := &cliente{t: c.t, h: c.h}
+	otro.ingresar(usuario, clave)
+	otro.llamar("POST", "/api/sesion/clave", map[string]any{"actual": clave, "nueva": clave + "-nueva"})
+	return otro
+}
+
+func (c *cliente) crearUsuario(usuario, rol string) string {
+	c.t.Helper()
+	cod, r := c.llamar("POST", "/api/usuarios", map[string]any{"usuario": usuario, "nombre": "Nombre " + usuario, "rol": rol, "clave": "clave-" + usuario})
 	if cod != http.StatusCreated {
-		t.Fatalf("esperaba 201, obtuve %d: %v", cod, res)
+		c.t.Fatalf("alta de %s: %d %v", usuario, cod, r)
 	}
-	// Reintento idempotente
-	cod, res = llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T1", "anexo", codigo(anio, 4))})
-	if cod != http.StatusOK || res["duplicado"] != true {
-		t.Fatalf("el reintento debía ser idempotente: %d %v", cod, res)
+	return r["usuario"].(map[string]any)["id"].(string)
+}
+
+func tramiteSGD(numero string) map[string]any {
+	return map[string]any{"nroTramite": numero, "idInterno": "250101", "asuntoSgd": "Notificación de demanda contencioso administrativa", "enlaceSgd": "https://sgd.sedapar.com.pe/tramites/detalletramite/250101", "fechaIngresoSgd": "10/10/2026 09:14:22"}
+}
+
+func lista(r map[string]any, clave string) []any {
+	l, _ := r[clave].([]any)
+	return l
+}
+
+func TestBaseDeDatosIniciaVacia(t *testing.T) {
+	s, c := entorno(t)
+	_, d := c.llamar("GET", "/api/datos", nil)
+	if len(lista(d, "procesos")) != 0 || len(lista(d, "tramites")) != 0 || len(lista(d, "usuarios")) != 1 {
+		t.Fatalf("la BD debía iniciar vacía (solo el administrador): %d procesos, %d usuarios", len(lista(d, "procesos")), len(lista(d, "usuarios")))
 	}
-	_, lista := llamar(t, h, "GET", "/api/vinculaciones", nil)
-	if n := len(lista["tramitesIndexados"].([]any)); n != 1 {
-		t.Fatalf("esperaba 1 trámite, hay %d", n)
+	if len(s.taxonomia().Categorias) < 8 {
+		t.Fatalf("la taxonomía base debía cargarse")
 	}
 }
 
-func TestNoSeAnexaAProcesoFinalizado(t *testing.T) {
-	h := servidorDePrueba(t)
-	cod, res := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T2", "anexo", codigo(time.Now().Year(), 6))})
-	if cod != http.StatusConflict || !strings.Contains(res["mensaje"].(string), "finalizado") {
-		t.Fatalf("esperaba 409 por proceso finalizado, obtuve %d %v", cod, res)
-	}
-}
+func TestFlujoCompletoDeIndexacion(t *testing.T) {
+	_, admin := entorno(t)
+	profID := admin.crearUsuario("mquispe", RolProfesional)
+	admin.crearUsuario("otroprof", RolProfesional)
+	admin.crearUsuario("asistente1", RolAsistente)
+	prof := admin.como("mquispe", "clave-mquispe")
+	asis := admin.como("asistente1", "clave-asistente1")
 
-func TestGenerarProcesoAsignaCodigoCorrelativo(t *testing.T) {
-	h := servidorDePrueba(t)
-	nuevo := map[string]any{"denominacion": "Arbitraje nuevo", "categoria": "Arbitraje y Controversias", "procedimiento": "Arbitraje de Derecho", "responsable": "R02"}
-	cod, res := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T3", "nuevo", ""), "procesoNuevo": nuevo})
+	// Plantilla del profesional para el proceso ordinario contencioso administrativo:
+	// una tarea con plazo fijo desde el inicio y otra cuyo plazo se define después.
+	diez := 10
+	plantilla := map[string]any{"nombre": "Mi ordinario CA", "categoria": "CAD", "via": "CAD-ORD", "tareas": []map[string]any{
+		{"nombre": "Contestar demanda", "plazoDias": diez, "tipoDias": "habiles", "desde": "inicio"},
+		{"nombre": "Audiencia", "plazoDias": nil},
+		{"nombre": "Alegatos", "plazoDias": 5},
+	}}
+	cod, r := prof.llamar("POST", "/api/plantillas", plantilla)
 	if cod != http.StatusCreated {
-		t.Fatalf("esperaba 201, obtuve %d %v", cod, res)
+		t.Fatalf("alta de plantilla: %d %v", cod, r)
 	}
-	esperado := codigo(time.Now().Year(), 7)
-	if res["proceso"].(map[string]any)["codigo"] != esperado {
-		t.Fatalf("esperaba código %s, obtuve %v", esperado, res["proceso"])
+	pltID := r["plantilla"].(map[string]any)["id"].(string)
+	if cod, _ := prof.llamar("POST", "/api/plantillas", plantilla); cod != http.StatusConflict {
+		t.Fatalf("no debía permitir dos plantillas para la misma vía: %d", cod)
 	}
-	_, cat := llamar(t, h, "GET", "/api/catalogo", nil)
-	if n := len(cat["procesos"].([]any)); n != 3 {
-		t.Fatalf("el catálogo debía incluir el proceso nuevo; hay %d procesos", n)
+	// Sin aprobación no se puede crear el proceso ni aparece en el Conector.
+	nuevo := map[string]any{"accion": "nuevo", "tramite": tramiteSGD("2026-01234-3"), "detalle": "Cédula de notificación",
+		"proceso": map[string]any{"categoria": "CAD", "via": "CAD-ORD", "profesionalId": profID}}
+	if cod, _ := asis.llamar("POST", "/api/indexar", nuevo); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("sin plantilla aprobada no debía crearse el proceso: %d", cod)
 	}
-}
+	if cod, _ := prof.llamar("POST", "/api/plantillas/"+pltID+"/revision", map[string]any{"decision": "aprobar"}); cod != http.StatusForbidden {
+		t.Fatalf("el profesional no debía aprobar su propia plantilla: %d", cod)
+	}
+	if cod, r := admin.llamar("POST", "/api/plantillas/"+pltID+"/revision", map[string]any{"decision": "aprobar"}); cod != http.StatusOK {
+		t.Fatalf("aprobación: %d %v", cod, r)
+	}
 
-func TestValidaciones(t *testing.T) {
-	h := servidorDePrueba(t)
-	sinAsunto := tramite("T4", "anexo", codigo(time.Now().Year(), 4))
-	delete(sinAsunto, "asunto")
-	if cod, _ := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": sinAsunto}); cod != http.StatusUnprocessableEntity {
-		t.Fatalf("esperaba 422 por asunto faltante, obtuve %d", cod)
+	// El asistente indexa un trámite como proceso nuevo: sin correlativo, por categoría → vía → profesional.
+	cod, r = asis.llamar("POST", "/api/indexar", nuevo)
+	if cod != http.StatusCreated {
+		t.Fatalf("indexar nuevo: %d %v", cod, r)
 	}
-	malo := map[string]any{"denominacion": "X", "categoria": "Arbitraje y Controversias", "procedimiento": "Proceso Laboral", "responsable": "R02"}
-	if cod, _ := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T5", "nuevo", ""), "procesoNuevo": malo}); cod != http.StatusUnprocessableEntity {
-		t.Fatalf("esperaba 422 por procedimiento ajeno a la categoría, obtuve %d", cod)
+	proc := r["proceso"].(map[string]any)
+	if !strings.HasPrefix(proc["codigo"].(string), "PL-") || proc["titulo"] != "Notificación de demanda contencioso administrativa" || proc["plantillaNombre"] != "Mi ordinario CA" {
+		t.Fatalf("proceso mal generado: %v", proc)
 	}
-	if cod, _ := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tramite("T6", "anexo", "PL-1999-0001")}); cod != http.StatusNotFound {
-		t.Fatalf("esperaba 404 por proceso inexistente, obtuve %d", cod)
+	if r["tareasGeneradas"].(float64) != 3 {
+		t.Fatalf("debían generarse 3 tareas de la plantilla: %v", r["tareasGeneradas"])
 	}
-}
+	procID := proc["id"].(string)
+	if proc["fechaInicio"] != "2026-10-10" {
+		t.Fatalf("el proceso debía iniciar en la fecha de ingreso al SGD: %v", proc["fechaInicio"])
+	}
 
-func TestCorsSoloParaLaExtension(t *testing.T) {
-	h := servidorDePrueba(t)
-	for origen, permitido := range map[string]bool{"chrome-extension://abc": true, "https://sitio-externo.example": false} {
-		req := httptest.NewRequest("GET", "/api/estado", nil)
-		req.Header.Set("Origin", origen)
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
-		if got := rec.Header().Get("Access-Control-Allow-Origin") != ""; got != permitido {
-			t.Errorf("origen %s: CORS permitido=%v, esperado %v", origen, got, permitido)
+	// Lo indexado es visible en el portal del profesional.
+	_, d := prof.llamar("GET", "/api/datos", nil)
+	if len(lista(d, "procesos")) != 1 || len(lista(d, "tramites")) != 1 || len(lista(d, "tareas")) != 3 {
+		t.Fatalf("el portal debía mostrar lo indexado: %d procesos, %d trámites, %d tareas", len(lista(d, "procesos")), len(lista(d, "tramites")), len(lista(d, "tareas")))
+	}
+	tareas := lista(d, "tareas")
+	t1, t2, t3 := tareas[0].(map[string]any), tareas[1].(map[string]any), tareas[2].(map[string]any)
+	if t1["estado"] != TareaPendiente || t1["fechaInicio"] == nil || t1["fechaLimite"] == nil || t1["fechaLimite"] == "" {
+		t.Fatalf("la primera tarea debía quedar disponible con fecha límite: %v", t1)
+	}
+	// No se avanza una tarea cuya antecesora no finalizó.
+	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t2["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusConflict {
+		t.Fatalf("debía exigir que la antecesora finalice: %d", cod)
+	}
+	// Retroceder exige justificación. Un cambio sin sucesoras habilitadas responde una lista vacía, no null.
+	if _, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnRevision}); r["sucesoras"] == nil {
+		t.Fatalf("«sucesoras» debía ser una lista vacía: %v", r)
+	}
+	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("el retroceso sin justificación debía rechazarse: %d", cod)
+	}
+	if cod, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso, "justificacion": "Falta adjuntar anexo", "color": "#d03b3b", "checklist": []map[string]any{{"texto": "Revisar anexos", "hecho": false}}}); cod != http.StatusOK || len(lista(r["tarea"].(map[string]any), "comentarios")) != 1 {
+		t.Fatalf("retroceso justificado: %d %v", cod, r)
+	}
+	// El retroceso llega como aviso a la gerencia hasta que lo marque como visto.
+	ger := admin.como(func() string { admin.crearUsuario("gerente1", RolGerente); return "gerente1" }(), "clave-gerente1")
+	_, dg := ger.llamar("GET", "/api/datos", nil)
+	var notID string
+	for _, a := range lista(dg, "alertas") {
+		if m := a.(map[string]any); m["tipo"] == "retroceso-tarea" {
+			notID, _ = m["notificacionId"].(string)
 		}
 	}
-}
-
-func TestPortalGuardaDocumento(t *testing.T) {
-	h := servidorDePrueba(t)
-	if cod, _ := llamar(t, h, "GET", "/api/portal", nil); cod != http.StatusNotFound {
-		t.Fatalf("esperaba 404 sin datos, obtuve %d", cod)
+	if notID == "" {
+		t.Fatalf("el gerente debía ver el retroceso: %v", lista(dg, "alertas"))
 	}
-	doc := map[string]any{"version": 2, "procesos": []any{map[string]any{"codigo": "PL-2026-0100", "estado": "En trámite"}}}
-	if cod, _ := llamar(t, h, "PUT", "/api/portal", doc); cod != http.StatusOK {
-		t.Fatalf("esperaba 200 al guardar, obtuve %d", cod)
+	if cod, _ := prof.llamar("POST", "/api/notificaciones/"+notID+"/vista", map[string]any{}); cod != http.StatusForbidden {
+		t.Fatalf("el profesional no marca avisos de gerencia: %d", cod)
 	}
-	_, cat := llamar(t, h, "GET", "/api/catalogo", nil)
-	if n := len(cat["procesos"].([]any)); n != 1 {
-		t.Fatalf("el catálogo debía tomar los procesos del portal; hay %d", n)
-	}
-}
-
-func TestConsultaTramiteRegistrado(t *testing.T) {
-	h := servidorDePrueba(t)
-	tr := tramite("T7", "anexo", codigo(time.Now().Year(), 4))
-	tr["nroExpediente"] = "2026-01234-3"
-	if cod, _ := llamar(t, h, "POST", "/api/vinculaciones", map[string]any{"tramite": tr}); cod != http.StatusCreated {
-		t.Fatalf("esperaba 201, obtuve %d", cod)
-	}
-	_, res := llamar(t, h, "GET", "/api/tramites-sgd?numero=2026-01234-3", nil)
-	if res["registrado"] != true || len(res["vinculaciones"].([]any)) != 1 {
-		t.Fatalf("el trámite debía figurar como registrado: %v", res)
-	}
-	_, res = llamar(t, h, "GET", "/api/tramites-sgd?numero=2026-09999-1", nil)
-	if res["registrado"] != false {
-		t.Fatalf("un trámite nuevo no debía figurar como registrado: %v", res)
-	}
-}
-
-func TestRutasDelSgdSimulado(t *testing.T) {
-	h := servidorDePrueba(t)
-	for ruta, contiene := range map[string]string{
-		"/sgd-simulado/pages/login":                    "id=\"ingreso\"",
-		"/sgd-simulado/tramites/mistramites":           "app-mistramites",
-		"/sgd-simulado/tramites/detalletramite/250101": "app-detalletramite",
-		"/sgd-simulado/estilos.css":                    "legend.title",
-	} {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("GET", ruta, nil))
-		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), contiene) {
-			t.Errorf("%s: código %d, se esperaba que contuviera %q", ruta, rec.Code, contiene)
+	ger.llamar("POST", "/api/notificaciones/"+notID+"/vista", map[string]any{})
+	_, dg = ger.llamar("GET", "/api/datos", nil)
+	for _, a := range lista(dg, "alertas") {
+		if a.(map[string]any)["tipo"] == "retroceso-tarea" {
+			t.Fatal("el aviso visto no debía seguir apareciendo")
 		}
 	}
+
+	// Al finalizar la primera tarea, la audiencia (sin plazo) queda en proceso y se alerta.
+	if cod, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaFinalizada}); cod != http.StatusOK || len(lista(r, "sucesoras")) != 1 {
+		t.Fatalf("finalizar tarea: %d %v", cod, r)
+	}
+	_, d = prof.llamar("GET", "/api/datos", nil)
+	if !hayAlerta(d, "sucesora-sin-plazo", t2["id"].(string)) || hayAlerta(d, "plazo-no-definido", t2["id"].(string)) {
+		t.Fatalf("debía alertar que la antecesora finalizó y la audiencia no tiene plazo: %v", lista(d, "alertas"))
+	}
+
+	// El asistente solicita la definición del plazo y el profesional lo define en bloque.
+	if cod, r := asis.llamar("POST", "/api/solicitudes", map[string]any{"tareaId": t2["id"], "mensaje": "Fijar fecha de audiencia"}); cod != http.StatusCreated {
+		t.Fatalf("solicitud: %d %v", cod, r)
+	}
+	if cod, _ := asis.llamar("PUT", "/api/tareas/"+t2["id"].(string), map[string]any{"fechaLimite": "2030-01-10"}); cod != http.StatusForbidden {
+		t.Fatalf("el asistente no debía editar plazos: %d", cod)
+	}
+	if cod, r := prof.llamar("PUT", "/api/plazos", map[string]any{"cambios": []map[string]any{{"id": t2["id"], "fechaLimite": "2030-01-10"}, {"id": t3["id"], "plazoDias": 7, "tipoDias": "calendario"}}}); cod != http.StatusOK {
+		t.Fatalf("plazos en bloque: %d %v", cod, r)
+	}
+	_, d = prof.llamar("GET", "/api/datos", nil)
+	if hayAlerta(d, "sucesora-sin-plazo", t2["id"].(string)) || hayAlerta(d, "solicitud-plazo", t2["id"].(string)) {
+		t.Fatalf("las alertas de plazo debían resolverse: %v", lista(d, "alertas"))
+	}
+
+	// Proceso existente: anexar otro trámite; duplicado pide confirmación.
+	ex := map[string]any{"accion": "existente", "procesoId": procID, "tareaId": t2["id"], "tramite": tramiteSGD("2026-01300-1")}
+	if cod, r := asis.llamar("POST", "/api/indexar", ex); cod != http.StatusCreated {
+		t.Fatalf("anexar: %d %v", cod, r)
+	}
+	if cod, _ := asis.llamar("POST", "/api/indexar", ex); cod != http.StatusConflict {
+		t.Fatalf("el duplicado debía pedir confirmación: %d", cod)
+	}
+	ex["confirmarDuplicado"] = true
+	if cod, _ := asis.llamar("POST", "/api/indexar", ex); cod != http.StatusCreated {
+		t.Fatalf("el duplicado confirmado debía registrarse: %d", cod)
+	}
+
+	// No se finaliza con tareas abiertas; luego sí, y ya no admite trámites.
+	if cod, _ := prof.llamar("PUT", "/api/procesos/"+procID, map[string]any{"estado": ProcesoFinalizado}); cod != http.StatusConflict {
+		t.Fatalf("no debía finalizar con tareas abiertas: %d", cod)
+	}
+	for _, x := range []any{t2["id"], t3["id"]} {
+		prof.llamar("PUT", "/api/tareas/"+x.(string), map[string]any{"estado": TareaFinalizada})
+	}
+	if cod, r := prof.llamar("PUT", "/api/procesos/"+procID, map[string]any{"estado": ProcesoFinalizado}); cod != http.StatusOK {
+		t.Fatalf("finalizar proceso: %d %v", cod, r)
+	}
+	ex["tramite"] = tramiteSGD("2026-01400-1")
+	if cod, _ := asis.llamar("POST", "/api/indexar", ex); cod != http.StatusConflict {
+		t.Fatalf("un proceso finalizado no debía admitir trámites: %d", cod)
+	}
+	_, cat := asis.llamar("GET", "/api/catalogo", nil)
+	if len(lista(cat, "procesos")) != 0 || len(lista(cat, "profesionales")) != 2 {
+		t.Fatalf("el catálogo del Conector debía excluir finalizados: %v", cat["procesos"])
+	}
+	_, cat = prof.llamar("GET", "/api/catalogo", nil)
+	if len(lista(cat, "profesionales")) != 1 {
+		t.Fatalf("el profesional solo debía verse a sí mismo: %v", cat["profesionales"])
+	}
 }
+
+func TestProcesoExigePlantillaAprobada(t *testing.T) {
+	_, admin := entorno(t)
+	profID := admin.crearUsuario("jsalazar", RolProfesional)
+	base := map[string]any{"titulo": "Demanda de obligación de dar suma de dinero", "categoria": "CIV", "via": "CIV-CON", "profesionalId": profID}
+	if cod, _ := admin.llamar("POST", "/api/procesos", base); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("sin plantilla aprobada debía rechazarse: %d", cod)
+	}
+	cod, r := admin.llamar("POST", "/api/plantillas", map[string]any{"profesionalId": profID, "categoria": "CIV", "via": "CIV-CON", "tareas": []map[string]any{{"nombre": "Contestar", "plazoDias": 30}, {"nombre": "Audiencia"}}})
+	if cod != http.StatusCreated {
+		t.Fatalf("plantilla: %d %v", cod, r)
+	}
+	id := r["plantilla"].(map[string]any)["id"].(string)
+	admin.llamar("POST", "/api/plantillas/"+id+"/revision", map[string]any{"decision": "aprobar"})
+	// Una nueva versión queda pendiente, pero los procesos siguen usando la aprobada.
+	admin.llamar("PUT", "/api/plantillas/"+id, map[string]any{"categoria": "CIV", "via": "CIV-CON", "tareas": []map[string]any{{"nombre": "Solo una"}}})
+	cod, r = admin.llamar("POST", "/api/procesos", base)
+	if cod != http.StatusCreated || len(lista(r, "tareas")) != 2 {
+		t.Fatalf("debía usar la versión aprobada (2 tareas): %d %v", cod, r)
+	}
+	if cod, _ := admin.llamar("POST", "/api/plantillas/"+id+"/revision", map[string]any{"decision": "observar"}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("observar exige texto: %d", cod)
+	}
+	if cod, _ := admin.llamar("POST", "/api/procesos", map[string]any{"titulo": "X", "categoria": "CIV", "via": "PEN-COM", "profesionalId": profID}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("la vía debía pertenecer a la categoría: %d", cod)
+	}
+}
+
+func TestAdministracionDeBD(t *testing.T) {
+	_, admin := entorno(t)
+	profID := admin.crearUsuario("prof1", RolProfesional)
+	admin.llamar("POST", "/api/procesos", map[string]any{"titulo": "P", "categoria": "LAB", "via": "LAB-ORD", "profesionalId": profID})
+	_, bd := admin.llamar("GET", "/api/admin/bd", nil)
+	if len(lista(bd, "colecciones")) != len(colecciones) {
+		t.Fatalf("debía listar las colecciones: %v", bd)
+	}
+	_, docs := admin.llamar("GET", "/api/admin/bd/usuarios", nil)
+	for _, d := range lista(docs, "documentos") {
+		if strings.Contains(string(mustJSON(d)), "pbkdf2") {
+			t.Fatal("no debía exponer huellas de contraseña")
+		}
+	}
+	if cod, _ := admin.llamar("POST", "/api/admin/vaciar", map[string]any{"modo": "operativos", "confirmacion": "no"}); cod != http.StatusUnprocessableEntity {
+		t.Fatalf("debía exigir la confirmación VACIAR: %d", cod)
+	}
+	if cod, _ := admin.llamar("POST", "/api/admin/vaciar", map[string]any{"modo": "operativos", "confirmacion": "VACIAR"}); cod != http.StatusOK {
+		t.Fatalf("vaciar operativos: %d", cod)
+	}
+	_, d := admin.llamar("GET", "/api/datos", nil)
+	if len(lista(d, "procesos")) != 0 || len(lista(d, "usuarios")) != 2 {
+		t.Fatalf("debía borrar procesos y conservar usuarios")
+	}
+	if cod, _ := admin.llamar("POST", "/api/admin/vaciar", map[string]any{"modo": "total", "confirmacion": "VACIAR"}); cod != http.StatusOK {
+		t.Fatalf("vaciar total: %d", cod)
+	}
+	if cod, _ := admin.llamar("GET", "/api/datos", nil); cod != http.StatusUnauthorized {
+		t.Fatalf("tras el vaciado total la sesión debía cerrarse: %d", cod)
+	}
+	admin.ingresar("admin", "admin") // administrador recreado con la clave inicial del .env
+}
+
+func TestPermisosYCsrf(t *testing.T) {
+	_, admin := entorno(t)
+	admin.crearUsuario("gerente1", RolGerente)
+	ger := admin.como("gerente1", "clave-gerente1")
+	if cod, _ := ger.llamar("GET", "/api/admin/bd", nil); cod != http.StatusForbidden {
+		t.Fatalf("el gerente no debía administrar la BD: %d", cod)
+	}
+	req := httptest.NewRequest("POST", "/api/sesion", strings.NewReader(`{"usuario":"admin","clave":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://sitio-externo.example")
+	rec := httptest.NewRecorder()
+	admin.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("debía rechazar orígenes externos: %d", rec.Code)
+	}
+	req = httptest.NewRequest("GET", "/api/estado", nil)
+	req.Header.Set("Origin", "chrome-extension://abc")
+	rec = httptest.NewRecorder()
+	admin.h.ServeHTTP(rec, req)
+	if rec.Header().Get("Access-Control-Allow-Origin") != "chrome-extension://abc" {
+		t.Fatal("debía permitir CORS a la extensión")
+	}
+}
+
+func TestDiasHabiles(t *testing.T) {
+	cal := nuevoCalendario(nil)
+	// Viernes 24/07/2026 + 3 hábiles: cuenta 27, 30 y 31 (28 y 29 son Fiestas Patrias).
+	if f := cal.Sumar("2026-07-24", 3, DiasHabiles); f != "2026-07-31" {
+		t.Fatalf("esperaba 2026-07-31, obtuve %s", f)
+	}
+	// Pascua 2026: 5 de abril → Jueves y Viernes Santo 2 y 3 de abril.
+	if !cal.feriados["2026-04-02"] || !cal.feriados["2026-04-03"] {
+		t.Fatal("faltan Jueves y Viernes Santo")
+	}
+	// Días calendario que vencen en domingo se prorrogan al lunes.
+	if f := cal.Sumar("2026-10-16", 2, DiasCalendario); f != "2026-10-19" {
+		t.Fatalf("esperaba 2026-10-19, obtuve %s", f)
+	}
+}
+
+func TestExtensionPreconfigurada(t *testing.T) {
+	s, _ := entorno(t)
+	archivos, err := s.archivosExtension()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(archivos["shared/entorno.js"]), "http://192.168.1.10:8790") {
+		t.Fatalf("entorno.js debía apuntar a la URL pública: %s", archivos["shared/entorno.js"])
+	}
+	if !strings.Contains(string(archivos["manifest.json"]), "http://192.168.1.10/*") {
+		t.Fatalf("manifest.json debía incluir el permiso del servidor: %s", archivos["manifest.json"])
+	}
+}
+
+func hayAlerta(d map[string]any, tipo, tareaID string) bool {
+	for _, a := range lista(d, "alertas") {
+		m := a.(map[string]any)
+		if m["tipo"] == tipo && m["tareaId"] == tareaID {
+			return true
+		}
+	}
+	return false
+}
+
+func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }

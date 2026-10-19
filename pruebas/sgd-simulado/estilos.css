@@ -26,3 +26,4 @@ table.table { width: 100%; border-collapse: collapse; } .table th, .table td { b
 .login { max-width: 340px; margin: 80px auto; background: #fff; padding: 22px; border-top: 4px solid #1f77b4; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
 .login label { display: block; margin: 10px 0 4px; font-weight: bold; } .login input { width: 100%; box-sizing: border-box; padding: 6px; }
 .btn { margin-top: 14px; background: #1f77b4; color: #fff; border: 0; padding: 8px 14px; cursor: pointer; }
+.form-group { margin-bottom: 8px; } .form-group label { display: block; font-size: 11px; color: #888; font-weight: 700; } .text-muted { color: #555; margin: 2px 0 0; }

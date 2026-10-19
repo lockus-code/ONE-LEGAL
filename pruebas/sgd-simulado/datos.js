@@ -9,7 +9,7 @@ window.SGD_TRAMITES = [
   { id: 250102, numero: '2026 - 00871 - 12', fecha: '11/10/2026 11:02:05', remitente: 'MESA DE PARTES', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'NOTIFICACIÓN JUDICIAL - DEMANDA CONTENCIOSO ADMINISTRATIVA', estado: 'DERIVADO', tipo: 'CÉDULA', asociados: ['2026 - 00871 - 11', '2026 - 00871 - 10'] },
   { id: 250103, numero: '2025 - 04410 - 1', fecha: '18/12/2025 16:40:51', remitente: 'GERENCIA COMERCIAL', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'RECURSO DE APELACIÓN CONTRA RESOLUCIÓN DE GERENCIA COMERCIAL', estado: 'EN PROCESO', tipo: 'RECURSO', asociados: [] },
   { id: 250104, numero: '2026 - 01301 - 1', fecha: '12/10/2026 08:30:00', remitente: 'ÓRGANO DE CONTROL INSTITUCIONAL', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'TRÁMITE RESERVADO', estado: 'DERIVADO', tipo: 'OFICIO', asociados: [], confidencial: true },
-  { id: 250105, numero: '2026 - 01322 - 2', fecha: '13/10/2026 15:21:47', remitente: 'GERENCIA DE OPERACIONES', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'REVISIÓN DE ADENDA AL CONTRATO DE SERVICIO DE VIGILANCIA', estado: 'DERIVADO', tipo: 'MEMORANDO', asociados: [] }
+  { id: 250105, numero: '2026 - 01322 - 2', fecha: '13/10/2026 15:21:47', remitente: 'GERENCIA DE OPERACIONES', derivado: 'GERENCIA DE ASESORÍA JURÍDICA', asunto: 'Difusión y cumplimiento de recomendaciones del Informe 037-2026/S-33000-WMG', estado: 'DERIVADO', tipo: 'MEMORANDO', asociados: [] }
 ];
 window.SGD_SESION = {
   obtener() { try { return JSON.parse(sessionStorage.getItem('sgd.sesion')); } catch (e) { return null; } },

@@ -30,12 +30,10 @@
 	route {
 		# 1. Solo redes autorizadas (red institucional / VPN).
 		respond @fueraDeRed "Acceso restringido a la red institucional." 403
-		# 2. El reinicio de la base de datos de prueba no se expone en el servidor.
-		respond /api/reiniciar "No disponible en este servidor." 403
-		# 3. La raíz lleva al portal.
+		# 2. La raíz lleva al portal.
 		redir / /portal/ 302
-		# 4. Las páginas (portal, SGD simulado) piden usuario y contraseña.
-		#    /api/* queda sin contraseña porque la usa la extensión (protegido por el paso 1).
+		# 3. Capa adicional de usuario y contraseña para las páginas (el portal además tiene su propio ingreso).
+		#    /api/* queda sin esta capa porque la usa la extensión con su token (protegido por el paso 1).
 		basic_auth @paginas {
 			# Una línea por usuario: "usuario hash" (hash generado con: caddy hash-password)
 			import /etc/caddy/legal-usuarios

@@ -1,130 +1,108 @@
-# LEGAL · Prototipos de captura SGD y gestión de procesos
+# LEGAL · Gestión de procesos legales con indexación desde el SGD
 
-Este repositorio contiene dos prototipos:
+LEGAL es un único ejecutable (`LEGAL.exe`) que se instala en **un equipo de la intranet** y ofrece a toda la red:
+
+- el **portal web** con cuatro roles (administrador, gerente, profesional y asistente administrativo);
+- la **base de datos NoSQL** (un solo archivo, `datos/legal.db`, que se crea vacía al primer inicio; no hay que instalar ningún motor);
+- la **extensión de Chrome «Conector SGD»**, ya configurada para ese servidor, que lee el trámite del SGD y lo indexa en LEGAL.
 
 | Carpeta | Contenido |
 |---|---|
-| `extension/` | **LEGAL · Conector SGD**: extensión de Chrome (Manifest V3) que lee los datos de un trámite del SGD y los vincula a un proceso legal. Solo lee. |
-| `portal/` | **Portal LEGAL**: portal web estático con el panel institucional (Gerencia) y las vistas del Responsable: Mi panel, Tablero de actividades (kanban), Mis procesos, Plantillas de procesos y Trámites SGD indexados. |
-| `pruebas/sgd-simulado/` | SGD simulado (inicio de sesión, bandeja y detalle de 6 expedientes ficticios) para probar la extensión sin entrar al sistema real. |
-| `servidor/` | **LEGAL-Prueba**: ejecutable que levanta el entorno de prueba completo con una base de datos NoSQL embebida. |
+| `descargas/` | `LEGAL.exe` listo para descargar (Windows 64 bits). |
+| `servidor/` | Código Go del servidor, la API, la base de datos y el ejecutable. |
+| `portal/` | Portal web (HTML/CSS/JS sin dependencias). |
+| `extension/` | Extensión Chrome (Manifest V3, panel lateral). |
+| `pruebas/sgd-simulado/` | SGD simulado con la estructura del SGD de SEDAPAR y datos ficticios. |
+| `docs/` | Reconocimiento del SGD (11), despliegue en Hetzner (12), KPI y alertas (13). |
 
 ---
 
-## 1. Conector SGD (extensión de Chrome)
+## 1. Instalación en el equipo servidor
 
-### Reglas de negocio implementadas
+1. Copie `descargas/LEGAL.exe` a una carpeta fija, por ejemplo `C:\LEGAL\`.
+2. Doble clic. En el primer inicio LEGAL:
+   - crea **`C:\LEGAL\.env`** con la configuración (dirección IP detectada, puerto 8790, SGD…);
+   - crea la **base de datos vacía** `C:\LEGAL\datos\legal.db` con la taxonomía normativa y el usuario `admin` (clave inicial `admin`, se pide cambiarla);
+   - prepara la extensión en `C:\LEGAL\datos\extension-conector-sgd`;
+   - abre el portal y muestra un ícono **LEGAL** junto al reloj (abrir portal, SGD simulado, carpetas, **Editar configuración (.env)**, detener).
+3. Windows preguntará si permite el acceso a la red: acepte **Redes privadas** para que el resto de la intranet llegue al servidor.
+4. Desde otros equipos: `http://<IP-del-servidor>:8790/` (página de inicio) o `/portal/`.
 
-1. **Solo con sesión activa en el SGD.** El ícono está deshabilitado en cualquier otra página. Chrome lo habilita mediante reglas declarativas cuando la URL corresponde al SGD configurado **y** la página muestra un indicador de sesión (por ejemplo, un enlace de "Cerrar sesión"). Al abrir la extensión, la sesión se vuelve a verificar: tiene que haber un indicador de sesión y no puede verse el formulario de ingreso con contraseña. Si la verificación falla, no se muestra ningún formulario.
-2. **Solo lectura.** El lector (`shared/lector.js`) solo consulta el DOM (`querySelector`, `innerText`, `value`). No hace clics, no envía formularios, no cambia valores y no hace peticiones de red. La extensión no pide los permisos `cookies`, `webRequest` ni `tabs`. Lo que se registra se guarda solo en el navegador (`chrome.storage.local`).
-3. **Vinculación del trámite**:
-   - **Anexar a proceso existente**: se busca por **Categoría → Procedimiento → Responsable** y por texto (código o denominación). La lista **excluye los procesos finalizados**.
-   - **Generar nuevo proceso**: Categoría, Procedimiento, Responsable y Denominación. Se le asigna un código correlativo `PL-AAAA-NNNN` y queda en estado *Registrado*.
-   - **Asunto de la vinculación**: descripción obligatoria de la actuación.
-   - Si el mismo documento ya se indexó en el mismo proceso, se pide confirmación antes de registrarlo de nuevo.
-4. **Enlace directo al trámite.** Se guarda la URL de la página del SGD sin los identificadores de sesión (`jsessionid`, `token`, `sid`…). Si hay una *plantilla de enlace permanente* configurada (por ejemplo `https://sgd…/consulta?expediente={nroExpediente}`), se usa esa.
+### Archivo `.env`
 
-### Datos que se leen
-
-N.° de expediente, N.° de registro / CUT / hoja de ruta, tipo y N.° de documento, asunto, remitente, dependencia de origen, fecha del documento, estado en el SGD y usuario SGD. El lector busca etiquetas institucionales comunes ("N° Expediente", "Asunto", "Remitente", "Sumilla", etc.) en tablas, `label`, `dt/dd` y textos del tipo "Etiqueta: valor". También revisa los controles de formulario cuyo `id` o `name` identifica el dato, y como último recurso aplica un patrón de búsqueda sobre el texto de la página. Todos los campos se pueden corregir antes de registrar. Si el usuario selecciona texto en el SGD, puede usarlo como asunto.
-
-### Instalación (modo desarrollador)
-
-1. Descargar este repositorio.
-2. En Chrome, abrir `chrome://extensions` y activar **Modo de desarrollador**.
-3. Pulsar **Cargar descomprimida** y elegir la carpeta `extension/`.
-4. Se abrirá **Configuración** (también disponible con clic derecho sobre el ícono → *Opciones*):
-   - **Dirección(es) del SGD**: el prefijo de la URL del SGD institucional, por ejemplo `https://sgd.institucion.gob.pe/`. Al guardar, Chrome pide permiso de lectura sobre ese dominio, que hace falta para leer los marcos internos (iframes) del SGD.
-   - **Indicadores de sesión**: los selectores que vienen por defecto (`a[href*='logout']`, `a[href*='salir']`…) cubren los casos más comunes. Si el ícono no se habilita con la sesión abierta, inspeccione el botón *Cerrar sesión* del SGD y agregue un selector simple, por ejemplo `#lnkSalir`. También puede usar el modo *En cualquier página del SGD*; la sesión se sigue verificando al abrir la extensión.
-5. Recargar la pestaña del SGD, iniciar sesión, abrir un trámite y pulsar el ícono **LEGAL**: se abre el **panel lateral de Chrome**, que sigue a la pestaña activa y vuelve a leer la página al cambiar de trámite.
-
-### SGD de SEDAPAR (`https://sgd.sedapar.com.pe`)
-
-Viene configurado de fábrica (`shared/entorno.js` y `host_permissions`) y usa un lector propio, `shared/lector-sedapar.js`, construido a partir del reconocimiento estructural (`docs/11-reconocimiento-sgd.md`):
-
-- Actúa en la página de detalle `/tramites/detalletramite/{ID}`. En la bandeja y en otras páginas el panel pide abrir un trámite.
-- Espera hasta 10 s a que Angular pinte el trámite (MutationObserver).
-- Lee **solo** el n.º de trámite y el ID interno de la URL. El n.º se obtiene con las estrategias P → R1 → R2 y la regla de consenso, y se normaliza a `AAAA-#####-S`. También toma la fecha de ingreso de la última fila de «MOVIMIENTO DEL EXPEDIENTE». El enlace directo es `https://sgd.sedapar.com.pe/tramites/detalletramite/{ID}`.
-- **No lee** la tarjeta «DATOS DEL SOLICITANTE», el asunto, el contenido, los nombres de servidores, el menú lateral, el almacenamiento web ni las cookies. El asunto lo redacta el usuario.
-- Si el número es ambiguo o no aparece, pasa a registro manual con validación del formato.
-- Si el trámite muestra el componente de confidencialidad con contenido (riesgo R7), no lee ni registra nada.
-- La sesión se reconoce por el diseño autenticado (`app-layout`, `sidebar-cmp`) fuera de `/pages/login`.
-- Si el trámite ya está vinculado a algún proceso, el panel lo avisa.
-
-### Prueba sin el SGD real
-
-La forma más simple es el **entorno de prueba `LEGAL-Prueba.exe`** (sección 3). Para hacerlo a mano, sirva la raíz del repositorio con `python3 -m http.server 8765`, configure `http://localhost:8765/pruebas/sgd-simulado/` como dirección del SGD y abra esa dirección. El SGD simulado acepta cualquier usuario y contraseña; sin sesión, el conector no se habilita.
-
-### Intercambio con el portal
-
-- **Trámites indexados → Exportar para LEGAL** genera `legal-sgd-intercambio-AAAA-MM-DD.json` (formato `legal-sgd-intercambio`, versión 1). Ese archivo se importa en el portal desde *Trámites SGD indexados → Importar desde Conector SGD*.
-- En el portal, **Exportar catálogo para el Conector** genera el catálogo de categorías, responsables y procesos, que se importa en la Configuración de la extensión.
-
----
-
-## 2. Portal LEGAL
-
-Basta con abrir `portal/index.html` en el navegador; no tiene dependencias ni necesita compilación. El selector **Perfil de acceso** cambia entre:
-
-- **Gerente de Asesoría Jurídica**
-  - *Panel institucional*: indicadores de procesos en curso, finalizados en el año, actividades vencidas, cumplimiento de plazos y trámites SGD de los últimos 30 días; procesos por categoría y por estado; trámites SGD indexados por semana; alertas de plazo; carga de trabajo por responsable. Se puede filtrar por categoría.
-  - *Cartera de procesos* y *Trámites SGD indexados* de toda la entidad. El gerente solo consulta y puede comentar.
-- **Responsable de procesos**
-  - *Mi panel*: indicadores propios, prioridades por fecha límite, últimos trámites SGD y avance de cada proceso.
-  - *Tablero de actividades*: kanban con las columnas Pendiente, En ejecución, En revisión, Observada y Concluida. Las fichas se arrastran entre columnas. Cada actividad (clave `LEG-NNN`, al estilo Jira) tiene descripción, **lista de verificación**, prioridad, fecha límite, trámites SGD vinculados con su enlace y una bitácora de comentarios.
-  - *Mis procesos*: estado, avance y trámites de cada proceso.
-  - *Plantillas de procesos*: 8 plantillas institucionales, organizadas en fases → actividades → lista de verificación, con plazos referenciales. **Generar proceso** crea el proceso y todas sus actividades en el tablero.
-  - *Trámites SGD indexados*: expediente, documento, asunto, proceso y actividad vinculados, con la **ruta directa al SGD** (botón *Abrir* y opción de copiar la ruta).
-
-Reglas del portal:
-
-- Un proceso **Finalizado** no admite actividades nuevas, sus actividades no se pueden editar y no recibe trámites anexados.
-- Un proceso no se puede finalizar mientras tenga actividades abiertas.
-- Para concluir una actividad con ítems pendientes en la lista de verificación hay que confirmarlo.
-- Las actividades vencidas y las que vencen en 7 días o menos se marcan con un ícono y una etiqueta, nunca solo con color.
-
-Los datos de ejemplo se calculan a partir de la fecha actual. Los cambios se guardan en el `localStorage` del navegador y se pueden borrar con **Restablecer datos de ejemplo**.
-
----
-
-## 3. Entorno de prueba `LEGAL-Prueba.exe`
-
-Un único ejecutable de Windows que se inicia con **doble clic, sin ventana de consola**:
-
-1. Crea la **base de datos de prueba** si no existe: `%LOCALAPPDATA%\LEGAL-Prueba\legal-prueba.db`. Es [bbolt](https://github.com/etcd-io/bbolt), un almacén NoSQL clave-valor embebido en un solo archivo; no hay que instalar ningún motor.
-2. Copia la **extensión ya configurada** en `%LOCALAPPDATA%\LEGAL-Prueba\extension-conector-sgd`, apuntando al SGD simulado y al servidor local.
-3. Levanta el servidor en `http://localhost:8790`, accesible solo desde el propio equipo:
-   - `/`: Centro de pruebas, con los pasos, el estado de la BD, las últimas vinculaciones y el botón para reiniciar la BD.
-   - `/sgd-simulado/`: SGD simulado con la estructura y las rutas del SGD de SEDAPAR (`/pages/login`, `/tramites/mistramites`, `/tramites/detalletramite/{ID}`), con carga asíncrona, trámites asociados, un trámite confidencial y datos ficticios.
-   - `/portal/`: Portal LEGAL. Lee y guarda en la BD e incorpora cada 8 segundos lo que registra el Conector.
-   - `/api/…`: API que usa el Conector (catálogo, registro de vinculaciones con las reglas de negocio) y el portal.
-4. Abre el Centro de pruebas en el navegador y muestra un ícono **LEGAL** en la bandeja del sistema, junto al reloj. Desde ese ícono se abren el portal, el SGD simulado y las carpetas, o se detiene con **Detener y salir**.
-
-Si se vuelve a hacer doble clic con el entorno ya en ejecución, solo se abre el Centro de pruebas. El registro de actividad queda en `%LOCALAPPDATA%\LEGAL-Prueba\registro.log`.
-
-Con el servidor, el Conector muestra «Conectado a LEGAL · Entorno de prueba» y cada vinculación se valida y guarda en la BD:
-
-- Anexar a un proceso finalizado → rechazado (409).
-- Proceso inexistente → 404.
-- Datos obligatorios faltantes o un procedimiento que no corresponde a la categoría → 422.
-- Para los procesos nuevos, el servidor asigna el código correlativo.
-
-Si el servidor no responde, el Conector sigue funcionando en modo local.
-
-**Construir** (requiere Go 1.22+ y Node.js):
-
-```bash
-servidor/construir.sh     # genera servidor/dist/LEGAL-Prueba.exe y servidor/dist/legal-prueba-linux
+```ini
+LEGAL_HOST=0.0.0.0                        # 0.0.0.0 = toda la intranet; 127.0.0.1 = solo este equipo
+LEGAL_PUERTO=8790
+LEGAL_URL_PUBLICA=http://192.168.1.25:8790  # dirección con la que los demás equipos llegan aquí
+LEGAL_DATOS=datos                         # carpeta de la base de datos
+LEGAL_SGD_URLS=https://sgd.sedapar.com.pe/  # uno o varios SGD, separados por coma
+LEGAL_SGD_SIMULADO=si                     # publica /sgd-simulado/ para pruebas
+LEGAL_ADMIN_USUARIO=admin
+LEGAL_ADMIN_CLAVE_INICIAL=admin           # solo al crear la BD vacía
+LEGAL_ABRIR_NAVEGADOR=si
+LEGAL_SESION_HORAS=12
 ```
 
-El script empaqueta `portal/`, `pruebas/sgd-simulado/` y `extension/` dentro del ejecutable y corre `go vet` y las pruebas de la API (`servidor/api_test.go`). En Linux o macOS puede ejecutarse con `-sin-bandeja` y `-datos <carpeta>`.
+Si el equipo cambia de IP, edite `LEGAL_URL_PUBLICA`, reinicie LEGAL (ícono › *Detener y salir* y doble clic) y vuelva a descargar la extensión en los equipos (o cambie la dirección en su *Configuración*). Las variables de entorno del sistema con el mismo nombre tienen prioridad sobre el archivo. Para tener varios SGD, agréguelos a `LEGAL_SGD_URLS`; el lector propio se usa en el SGD de SEDAPAR y un lector genérico (etiquetas «Asunto», «Expediente», «Remitente»…) en los demás.
 
 ---
 
-## 4. Despliegue en Hetzner Cloud
+## 2. Roles
 
-El instructivo completo está en [`docs/12-despliegue-hetzner.md`](docs/12-despliegue-hetzner.md). Usa:
+| Rol | Puede |
+|---|---|
+| **Administrador** | Todo lo anterior más: usuarios y roles, taxonomía (categorías, vías y etapas base), configuración de alertas y feriados, y la **base de datos**: explorar colecciones, editar o eliminar documentos JSON, descargar/restaurar respaldos, **vaciar datos operativos** o **vaciar todo** (confirmando con «VACIAR»). |
+| **Gerente** | Tablero de control institucional (semáforo de salud de la cartera, KPI de cartera, cronograma con SPI y gestión documental, desempeño desplegable por profesional con cada uno de sus procesos, alertas por prioridad y agenda de plazos; imprimible), cartera completa, alertas, **aprobar u observar plantillas**, reasignar procesos, solicitar plazos. |
+| **Profesional** | Su tablero de control (agenda de plazos, alertas por prioridad, procesos desplegables con su ciclo de tareas), sus procesos y **tablero de tareas** (arrastrar entre columnas o Mayús + ← →, ficha con detalle, checklist, color y comentarios), **definir plazos** (uno a uno o en bloque), finalizar procesos; **sus plantillas** de tareas por vía (enviadas a aprobación). |
+| **Asistente administrativo** | Indexar trámites desde el SGD con la extensión, registrar procesos, ver la cartera, **solicitar la definición de plazos**. |
 
-- `despliegue/cloud-init.yml`: deja el servidor Ubuntu 24.04 listo (Caddy con HTTPS, servicio `legal`, usuario de despliegue limitado, respaldo diario y fail2ban).
-- `despliegue/Caddyfile`: proxy HTTPS con filtro por IP institucional, contraseña para el portal y bloqueo de `/api/reiniciar`.
-- `.github/workflows/desplegar-hetzner.yml`: construye y prueba en cada pull request; en cada push a `main` despliega por SSH y vuelve a la versión anterior si la nueva no responde.
+Los KPI y las reglas de alerta están en [`docs/13-kpi-y-alertas.md`](docs/13-kpi-y-alertas.md).
+
+## 3. Categorías, vías y plantillas
+
+La elección del proceso sigue la jerarquía normativa peruana: **Categoría** (Civil, Penal, Laboral, Contencioso administrativo, Constitucional, Arbitraje y medios alternativos, Administrativo, Ejecución coactiva, Asesoría consultiva) → **Vía procedimental** (p. ej. Civil › Conocimiento, Abreviado, Sumarísimo, Cautelar, Único de ejecución, No contencioso) → **Profesional**. Cada vía trae sus etapas normativas base con plazos referenciales (CPC, NCPP, NLPT, TUO Ley 27584, Nuevo Código Procesal Constitucional, D. Leg. 1071, TUO Ley 27444, Ley 30057, TUO Ley 26979). El administrador puede editarlas.
+
+Cada **profesional** define su plantilla de tareas por vía (puede partir de las etapas base). Cada tarea tiene plazo fijo (días hábiles o calendario, desde el inicio del proceso o desde que concluye la antecesora) o queda **por definir**.
+
+**Aprobación:** cada versión que guarda el profesional queda *por aprobar*; la gerencia (o el administrador) la **aprueba** o la **observa** con un comentario. Solo las vías con plantilla aprobada se ofrecen para crear procesos (portal y extensión), y el ciclo se genera con la última versión aprobada aunque haya una nueva en revisión.
+
+## Tablero de tareas (profesional)
+
+- Columnas **Por hacer · En proceso · En revisión · Finalizada**; las fichas se **arrastran con el mouse**.
+- Solo se muestran las tareas **habilitadas**: sin antecesora o con la antecesora finalizada. El servidor rechaza avanzar una tarea cuya antecesora no finalizó.
+- **Retroceder** una ficha a una columna anterior pide una **justificación**, que queda en los comentarios y el historial, y **se notifica al gerente en su portal** (alerta «Retroceso de tarea» hasta que la marque como vista).
+- Al hacer clic se abre la **ficha de la tarea**: título y descripción editables, estado, fecha límite o plazo en días, **lista de verificación**, **color**, **comentarios**, historial, antecesora/sucesoras y documentos del SGD relacionados.
+- Cada ficha muestra su vencimiento (vencida, por vencer, vigente o por definir).
+
+## 4. Extensión Conector SGD
+
+**Instalación en cada equipo:** en el portal, *Cuenta › Instalar la extensión* (o `http://<servidor>:8790/descargas/conector-sgd.zip`), descomprimir, `chrome://extensions` › *Modo de desarrollador* › *Cargar descomprimida*. La extensión ya apunta al servidor.
+
+**Uso:** abrir el detalle de un trámite en el SGD (con sesión iniciada) y pulsar el ícono LEGAL. En el panel lateral:
+
+1. Ingresar con el usuario del portal (una vez por semana).
+2. **Trámite del SGD**: n.º de trámite, ID interno, **asunto** (leído del SGD — en SEDAPAR, el `<p class="text-muted">` que sigue al rótulo ASUNTO — y corregible), **fecha de ingreso** (será la fecha de inicio del proceso) y enlace directo.
+3. **¿Qué desea hacer?** (desplegable):
+   - *Crear un proceso nuevo* → **Elegir primero**: *el profesional* (Profesional → Vía, agrupadas por categoría) o *la categoría* (Categoría → Vía → Profesional). **Solo aparecen vías con plantilla aprobada.** Muestra qué ciclo se generará. **No se pide correlativo**: el código `PL-AAAA-NNNN` lo asigna LEGAL.
+   - *Anexar a un proceso existente* → **Buscar por**: *profesional* o *categoría y vía*; el desplegable de procesos se agrupa por Categoría › Vía, muestra su fecha de inicio y excluye los finalizados. Opcional: **tarea relacionada**.
+   - Si quien ingresa es un **profesional**, solo se ve a sí mismo y solo ve sus propios procesos.
+4. **Detalle de la indexación** (opcional): un asunto propio, distinto del asunto del trámite.
+5. **Indexar en LEGAL**. Se guarda en la base de datos del servidor y aparece en el portal (proceso, Trámites SGD, paneles) en segundos.
+
+La pestaña **Mis indexaciones** lista lo registrado, con un desplegable de acciones (abrir en el SGD, ver en el portal, copiar enlace, quitar). El conector solo lee la página: no hace clics en el SGD, no lee la tarjeta del solicitante, el contenido ni las cookies, y no actúa en trámites con indicador de confidencialidad.
+
+## 5. Pruebas con el SGD simulado
+
+Con `LEGAL_SGD_SIMULADO=si`, `http://<servidor>:8790/sgd-simulado/` reproduce las rutas del SGD de SEDAPAR con 5 trámites ficticios (acepta cualquier usuario). La extensión descargada ya lo incluye entre los SGD habilitados.
+
+Recorrido sugerido con la BD vacía: `admin` crea un profesional, un asistente y un gerente → el profesional crea su plantilla (p. ej. Contencioso administrativo › Proceso ordinario) → el gerente la aprueba → el asistente indexa el trámite 2026-00871-12 como proceso nuevo y anexa el 2026-01234-3 → el profesional mueve la primera tarea en *Mis tareas* hasta *Finalizada* y define en *Plazos por definir* el plazo que quedó pendiente → el gerente revisa el panel institucional.
+
+## 6. Construir
+
+Requiere Go 1.24+:
+
+```bash
+servidor/construir.sh   # go vet, pruebas y servidor/dist/LEGAL.exe + servidor/dist/legal-linux
+```
+
+En Linux: `legal-linux -sin-bandeja` (en ese modo el `.env` nuevo escucha en 127.0.0.1); opciones `-datos`, `-config`, `-host`, `-no-abrir`. El despliegue en Hetzner Cloud (Caddy + HTTPS) está en [`docs/12-despliegue-hetzner.md`](docs/12-despliegue-hetzner.md).

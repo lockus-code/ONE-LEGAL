@@ -7,9 +7,10 @@
  * Datos que lee (lista cerrada):
  *   - N.º de trámite, estrategias P → R1 → R2 con regla de consenso (§3.2) y forma canónica AAAA-#####-S (§3.4).
  *   - ID interno de la URL (§3.2).
+ *   - Asunto: campo «ASUNTO» de la tarjeta «DATOS DEL EXPEDIENTE» (§4). El usuario puede corregirlo.
  *   - Fecha/hora de ingreso: última fila de «MOVIMIENTO DEL EXPEDIENTE» (§4, opcional).
  *   - Indicio de confidencialidad (R7).
- * Nunca lee: tarjeta «DATOS DEL SOLICITANTE», asunto, contenido, nombres de servidores,
+ * Nunca lee: tarjeta «DATOS DEL SOLICITANTE», contenido, nombres de servidores,
  * menú lateral (usuario en sesión), almacenamiento web ni cookies (§8, «Prohibido»).
  * No hace clic, no envía formularios y no hace peticiones de red.
  *
@@ -66,6 +67,9 @@ async function leerPaginaSedapar(parametros) {
     else if (R2) numero = R2;
     else return null; // aún no renderizado
 
+    // Asunto: rótulo «ASUNTO» dentro de la tarjeta del expediente (nunca en la del solicitante).
+    const asunto = tarjeta ? leerAsunto(tarjeta) : null;
+
     // Fecha de ingreso: última fila de «MOVIMIENTO DEL EXPEDIENTE»
     let fechaIngreso = null;
     const mov = Array.from(raiz.querySelectorAll('.card')).find((c) => sinTildes((c.querySelector('legend') || {}).textContent).includes('MOVIMIENTO'));
@@ -81,8 +85,41 @@ async function leerPaginaSedapar(parametros) {
       motivo,
       estrategias: { P: Boolean(P), R1: Boolean(R1), R2: Boolean(R2 && R2 !== 'AMBIGUO') },
       fechaIngreso,
+      asunto,
       confidencial
     };
+  }
+
+  /** Busca el rótulo ASUNTO (b, strong, label, th, dt, span…) y toma su valor vecino. */
+  function leerAsunto(tarjeta) {
+    const limpiar = (t) => String(t || '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+    const esRotulo = (el) => /^ASUNTO\s*:?$/.test(sinTildes(el.textContent));
+    const control = tarjeta.querySelector("textarea[formcontrolname*='asunto' i], textarea[name*='asunto' i], input[formcontrolname*='asunto' i], input[name*='asunto' i]");
+    if (control && limpiar(control.value)) return limpiar(control.value);
+    const rotulo = Array.from(tarjeta.querySelectorAll('b, strong, label, th, dt, span, td, div, p')).find((el) => el.children.length === 0 && esRotulo(el));
+    if (!rotulo) return null;
+    // SGD de SEDAPAR: el valor va en el primer <p class="text-muted"> que sigue al rótulo
+    // (p. ej. <label>ASUNTO</label> <p class="text-muted"> Difusión y cumplimiento… </p>),
+    // antes del siguiente rótulo (CONTENIDO, etc.).
+    const elementos = Array.from(tarjeta.querySelectorAll('*'));
+    for (const el of elementos.slice(elementos.indexOf(rotulo) + 1)) {
+      const texto = limpiar(el.textContent);
+      if (el !== rotulo && el.children.length === 0 && el.matches('label, b, strong, h4, h5, h6, th, dt') && /^[A-ZÁÉÍÓÚÑ .]{3,40}:?$/.test(texto)) break;
+      if (el.matches('p.text-muted') && texto) return texto;
+    }
+    const ctl = rotulo.parentElement && rotulo.parentElement.querySelector('textarea, input:not([type=hidden])');
+    if (ctl && limpiar(ctl.value)) return limpiar(ctl.value);
+    if (rotulo.tagName === 'TH' || rotulo.tagName === 'TD') {
+      const celda = rotulo.nextElementSibling;
+      if (celda && limpiar(celda.textContent)) return limpiar(celda.textContent);
+    }
+    if (rotulo.tagName === 'DT' && rotulo.nextElementSibling) return limpiar(rotulo.nextElementSibling.textContent) || null;
+    // Texto del contenedor sin el rótulo (p. ej. <div><b>ASUNTO</b> texto</div>).
+    const padre = rotulo.parentElement;
+    const resto = limpiar(padre.textContent.replace(rotulo.textContent, '').replace(/^\s*:/, ''));
+    if (resto) return resto;
+    const siguiente = padre.nextElementSibling || rotulo.nextElementSibling;
+    return siguiente ? limpiar(siguiente.textContent) || null : null;
   }
 
   /** Espera (MutationObserver, con tope) a que `condicion` devuelva un valor. */
@@ -128,6 +165,7 @@ async function leerPaginaSedapar(parametros) {
     motivo: resultado ? resultado.motivo : 'NO_NODE',
     estrategias: resultado ? resultado.estrategias : null,
     fechaIngreso: resultado ? resultado.fechaIngreso : null,
+    asunto: resultado ? resultado.asunto : null,
     confidencial: resultado ? resultado.confidencial : false,
     msDeteccion: Date.now() - inicio
   };

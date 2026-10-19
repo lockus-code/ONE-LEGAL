@@ -30,3 +30,9 @@ func mostrarError(titulo, mensaje string) {
 	const mbIconError = 0x10
 	caja.Call(0, uintptr(unsafe.Pointer(m)), uintptr(unsafe.Pointer(t)), mbIconError)
 }
+
+const finDeLinea = "\r\n"
+
+func editarArchivo(ruta string) {
+	exec.Command("notepad", ruta).Start()
+}

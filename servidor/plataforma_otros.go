@@ -21,3 +21,7 @@ func abrirCon(arg string) {
 func abrirNavegador(url string)  { abrirCon(url) }
 func abrirCarpeta(ruta string)   { abrirCon(ruta) }
 func mostrarError(_, msg string) { log.Print(msg) }
+
+const finDeLinea = "\n"
+
+func editarArchivo(ruta string) { abrirCon(ruta) }

@@ -1,16 +1,15 @@
-// LEGAL-Prueba: entorno de prueba local del Conector SGD.
+// LEGAL: servidor de gestión de procesos legales para la intranet.
 //
 // Al ejecutarse (doble clic, sin consola):
-//   - crea la base de datos NoSQL de prueba si no existe;
-//   - prepara la carpeta de la extensión preconfigurada;
-//   - levanta el servidor en http://localhost:8790 (solo accesible desde este equipo);
-//   - abre el Centro de pruebas en el navegador y muestra un ícono en la bandeja del sistema.
+//   - crea el archivo .env junto al ejecutable si no existe (dirección, puerto, SGD…);
+//   - crea la base de datos NoSQL vacía (datos/legal.db) si no existe;
+//   - prepara la extensión Conector SGD apuntando a este servidor;
+//   - levanta el portal y la API en la intranet y muestra un ícono en la bandeja del sistema.
 package main
 
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -22,14 +21,13 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
 	"fyne.io/systray"
 )
 
-const puerto = 8790
+const puertoPredeterminado = 8790
 
 //go:embed all:web
 var webEmbebido embed.FS
@@ -40,63 +38,86 @@ var iconoICO []byte
 //go:embed recursos/icono.png
 var iconoPNG []byte
 
-var version = "0.3.0"
+var version = "1.2.0"
 
 func main() {
 	sinBandeja := flag.Bool("sin-bandeja", false, "no mostrar el ícono en la bandeja del sistema")
 	noAbrir := flag.Bool("no-abrir", false, "no abrir el navegador al iniciar")
-	dirDatos := flag.String("datos", "", "carpeta de datos (por defecto en el perfil del usuario)")
+	dirDatos := flag.String("datos", "", "carpeta de datos (por defecto, la indicada en .env)")
+	dirConfig := flag.String("config", "", "carpeta del archivo .env (por defecto, la del ejecutable)")
+	host := flag.String("host", "", "interfaz de escucha (por defecto, la indicada en .env)")
 	flag.Parse()
 
-	dir := *dirDatos
-	if dir == "" {
-		dir = directorioDatos()
+	// En modo servicio (-sin-bandeja, p. ej. detrás de un proxy HTTPS) el .env va en la carpeta de
+	// datos y, si se crea, escucha solo en este equipo. En Windows (con bandeja) escucha en la intranet.
+	base := *dirConfig
+	hostPredeterminado := "0.0.0.0"
+	if *sinBandeja {
+		hostPredeterminado = "127.0.0.1"
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		fallar("No se pudo crear la carpeta de datos", err)
+	if base == "" && *sinBandeja && *dirDatos != "" {
+		base = *dirDatos
+		os.MkdirAll(base, 0o755)
 	}
-	if f, err := os.OpenFile(filepath.Join(dir, "registro.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+	if base == "" {
+		base = carpetaEjecutable()
+	}
+	if !escribible(base) {
+		base = directorioUsuario()
+		os.MkdirAll(base, 0o755)
+	}
+	cfg := cargarConfig(base, hostPredeterminado)
+	if *dirDatos != "" {
+		cfg.DirDatos = *dirDatos
+	}
+	if *host != "" {
+		cfg.Host = *host
+	}
+	if *noAbrir {
+		cfg.AbrirNavegador = false
+	}
+	if err := os.MkdirAll(cfg.DirDatos, 0o755); err != nil {
+		fallar("No se pudo crear la carpeta de datos "+cfg.DirDatos, err)
+	}
+	if f, err := os.OpenFile(filepath.Join(cfg.DirDatos, "registro.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 		log.SetOutput(io.MultiWriter(f, os.Stderr))
 	}
 
-	base := fmt.Sprintf("http://localhost:%d/", puerto)
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", puerto))
+	direccion := net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Puerto))
+	ln, err := net.Listen("tcp", direccion)
 	if err != nil {
-		// Ya hay una instancia en ejecución: solo se abre el Centro de pruebas.
-		log.Printf("El puerto %d está en uso; se abre la instancia existente", puerto)
-		if !*noAbrir {
-			abrirNavegador(base)
+		// Ya hay una instancia en ejecución (o el puerto está ocupado): se abre el portal.
+		log.Printf("No se pudo escuchar en %s (%v); se abre la instancia existente", direccion, err)
+		if cfg.AbrirNavegador {
+			abrirNavegador(cfg.urlLocal() + "/portal/")
 		}
 		return
 	}
 
-	bd, err := abrirBD(filepath.Join(dir, "legal-prueba.db"))
+	bd, err := abrirBD(filepath.Join(cfg.DirDatos, "legal.db"))
 	if err != nil {
-		fallar("No se pudo abrir la base de datos de prueba", err)
+		fallar("No se pudo abrir la base de datos", err)
 	}
-
 	web, _ := fs.Sub(webEmbebido, "web")
-	semilla, err := leerSemilla(web)
-	if err != nil {
-		fallar("El catálogo de referencia embebido no es válido", err)
+	dirExt := filepath.Join(cfg.DirDatos, "extension-conector-sgd")
+	srv := &Servidor{bd: bd, cfg: cfg, web: web, dirExt: dirExt, version: version, iniciado: time.Now()}
+	if err := srv.inicializar(); err != nil {
+		fallar("No se pudo preparar la base de datos", err)
 	}
-
-	dirExt := filepath.Join(dir, "extension-conector-sgd")
-	if err := extraerExtension(web, dirExt, base); err != nil {
+	if err := srv.extraerExtension(dirExt); err != nil {
 		log.Printf("No se pudo preparar la extensión: %v", err)
 	}
 
-	srv := &Servidor{bd: bd, semilla: semilla, web: web, base: base, dirExt: dirExt, version: version, iniciado: time.Now()}
 	httpSrv := &http.Server{Handler: srv.Rutas(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("Servidor detenido: %v", err)
 		}
 	}()
-	log.Printf("LEGAL-Prueba %s en %s · datos en %s", version, base, dir)
+	log.Printf("LEGAL %s escuchando en %s · URL pública %s · datos en %s · configuración %s", version, direccion, cfg.URLPublica, cfg.DirDatos, cfg.RutaEnv)
 
-	if !*noAbrir {
-		abrirNavegador(base)
+	if cfg.AbrirNavegador {
+		abrirNavegador(cfg.urlLocal() + "/portal/")
 	}
 
 	detener := func() {
@@ -104,7 +125,7 @@ func main() {
 		defer cancelar()
 		httpSrv.Shutdown(ctx)
 		bd.Cerrar()
-		log.Print("LEGAL-Prueba detenido")
+		log.Print("LEGAL detenido")
 	}
 
 	if *sinBandeja {
@@ -114,42 +135,51 @@ func main() {
 		detener()
 		return
 	}
-	systray.Run(func() { menuBandeja(base, dirExt, dir) }, detener)
+	systray.Run(func() { menuBandeja(cfg, dirExt) }, detener)
 }
 
-func menuBandeja(base, dirExt, dirDatos string) {
+func menuBandeja(cfg Config, dirExt string) {
 	if runtime.GOOS == "windows" {
 		systray.SetIcon(iconoICO)
 	} else {
 		systray.SetIcon(iconoPNG)
 	}
 	systray.SetTitle("LEGAL")
-	systray.SetTooltip(fmt.Sprintf("LEGAL · Entorno de prueba (%s)", base))
+	systray.SetTooltip("LEGAL · " + cfg.URLPublica)
 
-	estado := systray.AddMenuItem("LEGAL · Entorno de prueba activo", "")
+	estado := systray.AddMenuItem("LEGAL activo en "+cfg.URLPublica, "")
 	estado.Disable()
 	systray.AddSeparator()
-	centro := systray.AddMenuItem("Abrir Centro de pruebas", "")
-	portal := systray.AddMenuItem("Abrir Portal LEGAL", "")
-	sgd := systray.AddMenuItem("Abrir SGD simulado", "")
+	portal := systray.AddMenuItem("Abrir portal", "")
+	inicio := systray.AddMenuItem("Página de inicio e instalación de la extensión", "")
+	var sgd *systray.MenuItem
+	if cfg.SGDSimulado {
+		sgd = systray.AddMenuItem("Abrir SGD simulado (pruebas)", "")
+	} else {
+		sgd = systray.AddMenuItem("SGD simulado desactivado", "")
+		sgd.Disable()
+	}
 	ext := systray.AddMenuItem("Abrir carpeta de la extensión", "")
 	datos := systray.AddMenuItem("Abrir carpeta de datos", "")
+	env := systray.AddMenuItem("Editar configuración (.env)", "")
 	systray.AddSeparator()
 	salir := systray.AddMenuItem("Detener y salir", "")
 
 	go func() {
 		for {
 			select {
-			case <-centro.ClickedCh:
-				abrirNavegador(base)
 			case <-portal.ClickedCh:
-				abrirNavegador(base + "portal/")
+				abrirNavegador(cfg.urlLocal() + "/portal/")
+			case <-inicio.ClickedCh:
+				abrirNavegador(cfg.urlLocal() + "/")
 			case <-sgd.ClickedCh:
-				abrirNavegador(base + "sgd-simulado/")
+				abrirNavegador(cfg.urlLocal() + "/sgd-simulado/")
 			case <-ext.ClickedCh:
 				abrirCarpeta(dirExt)
 			case <-datos.ClickedCh:
-				abrirCarpeta(dirDatos)
+				abrirCarpeta(cfg.DirDatos)
+			case <-env.ClickedCh:
+				editarArchivo(cfg.RutaEnv)
 			case <-salir.ClickedCh:
 				systray.Quit()
 				return
@@ -158,60 +188,40 @@ func menuBandeja(base, dirExt, dirDatos string) {
 	}()
 }
 
-// directorioDatos: %LOCALAPPDATA%\LEGAL-Prueba en Windows; equivalente en otros sistemas.
-func directorioDatos() string {
+func carpetaEjecutable() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	return filepath.Dir(exe)
+}
+
+func escribible(dir string) bool {
+	f, err := os.CreateTemp(dir, ".legal-prueba-escritura-*")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
+}
+
+// directorioUsuario: %LOCALAPPDATA%\LEGAL en Windows; equivalente en otros sistemas.
+func directorioUsuario() string {
 	if d := os.Getenv("LOCALAPPDATA"); d != "" {
-		return filepath.Join(d, "LEGAL-Prueba")
+		return filepath.Join(d, "LEGAL")
 	}
 	if d, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(d, "LEGAL-Prueba")
+		return filepath.Join(d, "LEGAL")
 	}
-	return "LEGAL-Prueba-datos"
-}
-
-func leerSemilla(web fs.FS) (Catalogo, error) {
-	var c Catalogo
-	b, err := fs.ReadFile(web, "catalogo-semilla.json")
-	if err != nil {
-		return c, err
-	}
-	err = json.Unmarshal(b, &c)
-	return c, err
-}
-
-// extraerExtension copia la extensión embebida a una carpeta del usuario y la
-// preconfigura para el entorno de prueba (SGD simulado y servidor local).
-func extraerExtension(web fs.FS, destino, base string) error {
-	err := fs.WalkDir(web, "extension", func(ruta string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		salida := filepath.Join(destino, filepath.FromSlash(strings.TrimPrefix(ruta, "extension")))
-		if d.IsDir() {
-			return os.MkdirAll(salida, 0o755)
-		}
-		b, err := fs.ReadFile(web, ruta)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(salida, b, 0o644)
-	})
-	if err != nil {
-		return err
-	}
-	entorno := map[string]any{
-		"urlsSgd":        []string{base + "sgd-simulado/", "https://sgd.sedapar.com.pe/"},
-		"servidorLegal":  strings.TrimSuffix(base, "/"),
-		"usuarioLegal":   "usuario.prueba",
-		"modoActivacion": "indicador",
-	}
-	b, _ := json.MarshalIndent(entorno, "", "  ")
-	contenido := "/* Generado por LEGAL-Prueba: configuración del entorno de prueba. */\nself.LEGAL_ENTORNO = " + string(b) + ";\n"
-	return os.WriteFile(filepath.Join(destino, "shared", "entorno.js"), []byte(contenido), 0o644)
+	return "LEGAL-datos"
 }
 
 func fallar(mensaje string, err error) {
 	log.Printf("%s: %v", mensaje, err)
-	mostrarError("LEGAL-Prueba", fmt.Sprintf("%s.\n\n%v", mensaje, err))
+	mostrarError("LEGAL", fmt.Sprintf("%s.\n\n%v", mensaje, err))
 	os.Exit(1)
 }

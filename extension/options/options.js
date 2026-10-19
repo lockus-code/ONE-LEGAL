@@ -19,17 +19,8 @@
     form.textosSesion.value = c.textosSesion.join('\n');
     form.plantillaEnlace.value = c.plantillaEnlace;
     form.parametrosSensibles.value = c.parametrosSensibles.join(', ');
-    form.usuarioLegal.value = c.usuarioLegal;
     form.servidorLegal.value = c.servidorLegal;
-    await resumen();
-  }
-
-  async function resumen() {
-    const cat = await A.obtenerCatalogo();
-    const tramites = await A.obtenerTramites();
-    const nuevos = await A.obtener(A.CLAVES.PROCESOS_NUEVOS, []);
-    $('origen-catalogo').textContent = `Catálogo ${cat.origen === 'importado' ? 'importado' : 'referencial (datos de ejemplo)'}: ${cat.categorias.length} categorías, ${cat.responsables.length} responsables, ${cat.procesos.length} procesos.`;
-    $('resumen-datos').textContent = `${tramites.length} trámite(s) indexado(s) y ${nuevos.length} proceso(s) generado(s) desde el conector. Los datos permanecen solo en este navegador.`;
+    $('estado-sesion').textContent = c.usuario ? `Sesión abierta como ${c.usuario.nombre} (${c.usuario.usuario}).` : 'Sin sesión: ingrese desde el panel lateral.';
   }
 
   function normalizarPrefijo(url) {
@@ -41,10 +32,12 @@
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     let urls;
+    let servidor = form.servidorLegal.value.trim().replace(/\/+$/, '');
     try {
       urls = lineas(form.urlsSgd.value).map(normalizarPrefijo);
+      if (servidor) servidor = normalizarPrefijo(servidor).replace(/\/+$/, '');
     } catch (e) {
-      mensaje('error', 'Revise las direcciones del SGD: deben iniciar con https:// o http://');
+      mensaje('error', 'Revise las direcciones: deben iniciar con https:// o http://');
       return;
     }
     const selectores = lineas(form.selectoresSesion.value);
@@ -53,14 +46,12 @@
       mensaje('error', `Selectores no válidos o con combinadores: ${invalidos.join(' | ')}`);
       return;
     }
-
-    // Solicitud de permiso de lectura sobre el dominio del SGD (gesto del usuario).
-    const origenes = [...new Set(urls.map((u) => `${new URL(u).origin}/*`))];
+    // Permiso de lectura sobre el SGD y de conexión con el servidor LEGAL (requiere el gesto del usuario).
+    const origenes = [...new Set([...urls, ...(servidor ? [servidor + '/'] : [])].map((u) => `${new URL(u).protocol}//${new URL(u).hostname}/*`))];
     let concedido = true;
     if (origenes.length) {
       try { concedido = await chrome.permissions.request({ origins: origenes }); } catch (e) { concedido = false; }
     }
-
     await A.guardar(A.CLAVES.CONFIG, {
       urlsSgd: urls,
       modoActivacion: form.modoActivacion.value,
@@ -68,59 +59,22 @@
       textosSesion: lineas(form.textosSesion.value),
       plantillaEnlace: form.plantillaEnlace.value.trim(),
       parametrosSensibles: form.parametrosSensibles.value.split(',').map((s) => s.trim()).filter(Boolean),
-      usuarioLegal: form.usuarioLegal.value.trim(),
-      servidorLegal: form.servidorLegal.value.trim().replace(/\/+$/, '')
+      servidorLegal: servidor
     });
     mensaje(concedido ? 'exito' : 'alerta', concedido
-      ? 'Configuración guardada. Recargue la pestaña del SGD para aplicar la habilitación del conector.'
-      : 'Configuración guardada. No se concedió el permiso de dominio: el conector leerá solo el marco principal de la página.');
-  });
-
-  $('archivo-catalogo').addEventListener('change', async (ev) => {
-    const archivo = ev.target.files[0];
-    if (!archivo) return;
-    try {
-      const datos = JSON.parse(await archivo.text());
-      const cat = datos.catalogo || datos;
-      if (!Array.isArray(cat.categorias) || !Array.isArray(cat.responsables) || !Array.isArray(cat.procesos)) throw new Error('estructura');
-      await A.guardar(A.CLAVES.CATALOGO, { categorias: cat.categorias, responsables: cat.responsables, procesos: cat.procesos });
-      mensaje('exito', `Catálogo importado: ${cat.procesos.length} procesos.`);
-      resumen();
-    } catch (e) {
-      mensaje('error', 'El archivo no tiene el formato esperado { categorias, responsables, procesos }.');
-    }
-    ev.target.value = '';
-  });
-
-  $('btn-catalogo-ref').addEventListener('click', async () => {
-    await new Promise((r) => chrome.storage.local.remove(A.CLAVES.CATALOGO, r));
-    mensaje('info', 'Se restableció el catálogo referencial.');
-    resumen();
-  });
-
-  $('btn-exportar').addEventListener('click', async () => {
-    const paquete = await A.construirExportacion();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(paquete, null, 2)], { type: 'application/json' }));
-    a.download = `legal-sgd-intercambio-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-  });
-
-  $('btn-limpiar').addEventListener('click', async () => {
-    if (!confirm('¿Eliminar los trámites indexados y procesos generados en este navegador? No afecta al SGD.')) return;
-    await new Promise((r) => chrome.storage.local.remove([A.CLAVES.TRAMITES, A.CLAVES.PROCESOS_NUEVOS], r));
-    mensaje('info', 'Registros locales eliminados.');
-    resumen();
+      ? 'Configuración guardada. Recargue la pestaña del SGD para aplicarla.'
+      : 'Configuración guardada, pero Chrome no concedió el permiso: el conector no podrá leer el SGD o conectarse al servidor.');
+    cargar();
   });
 
   $('btn-probar-servidor').addEventListener('click', async () => {
-    const config = { servidorLegal: form.servidorLegal.value.trim() };
     const salida = $('estado-servidor');
+    const config = { servidorLegal: form.servidorLegal.value.trim() };
     if (!config.servidorLegal) { salida.textContent = 'Indique la dirección del servidor.'; return; }
     salida.textContent = 'Probando…';
     try {
       const e = await LegalServidor.estado(config);
-      salida.textContent = `Conectado: ${e.nombre} · ${e.bd.tramites} trámite(s) en la base de datos.`;
+      salida.textContent = `Conectado: ${e.nombre} ${e.version} · ${e.bd.procesos} proceso(s), ${e.bd.tramites} trámite(s) indexados.`;
     } catch (err) {
       salida.textContent = `Sin conexión: ${err.message}`;
     }

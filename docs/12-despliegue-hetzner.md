@@ -19,11 +19,11 @@
  │                                                                              │
  │  Caddy (HTTPS automático con Let's Encrypt)                                  │
  │   1. solo deja pasar las IP de la institución (las demás reciben 403)        │
- │   2. bloquea /api/reiniciar                                                  │
+ │   2. pide usuario y contraseña en las páginas (capa adicional)               │
  │   3. pide usuario y contraseña para el portal (/api/* no, la usa la extensión)│
  │        │                                                                     │
  │        ▼ 127.0.0.1:8790 (no expuesto a Internet)                              │
- │  Servicio «legal» (usuario sin privilegios)  ──►  /var/lib/legal/legal-prueba.db │
+ │  Servicio «legal» (usuario sin privilegios)  ──►  /var/lib/legal/legal.db        │
  │  Respaldo diario 03:30 ──► /var/backups/legal (14 días)                      │
  └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -221,7 +221,7 @@ A partir de aquí, **cada merge a `main` se despliega solo**. Los pull requests 
 Desde una PC de la red institucional:
 
 1. Abra `https://legal.sudominio.pe`: lleva a `/portal/` y pide el usuario y la contraseña del paso 6.2. El candado del navegador debe estar en verde.
-2. `https://legal.sudominio.pe/api/estado` devuelve un JSON con `"servicio":"legal-prueba"`.
+2. `https://legal.sudominio.pe/api/estado` devuelve un JSON con `"servicio":"legal"`.
 3. Desde una red **fuera** de la lista (por ejemplo, datos móviles), la misma dirección responde «Acceso restringido a la red institucional».
 
 **Conectar el Conector SGD al servidor**, en cada PC:
@@ -255,8 +255,8 @@ Todos estos comandos se ejecutan dentro del servidor (`ssh -i $HOME\.ssh\legal-a
 
 ```bash
 systemctl stop legal
-cp /var/backups/legal/legal-prueba-AAAAMMDD-HHMMSS-diario.db /var/lib/legal/legal-prueba.db
-chown legal:legal /var/lib/legal/legal-prueba.db
+cp /var/backups/legal/legal-AAAAMMDD-HHMMSS-diario.db /var/lib/legal/legal.db
+chown legal:legal /var/lib/legal/legal.db
 systemctl start legal
 ```
 
@@ -278,3 +278,7 @@ Es suficiente para el piloto con datos de prueba. **Antes de cargar información
 4. **Base de datos de prueba:** bbolt en un solo archivo, sin replicación. Para producción conviene un motor gestionado o, al menos, respaldos fuera del servidor.
 5. **El SGD simulado** (`/sgd-simulado/`) sigue publicado detrás de la misma protección. Se puede quitar en el `Caddyfile` cuando ya no se use.
 6. **Ubicación de los datos:** ver el visto bueno del paso 1 (Ley 29733, flujo transfronterizo).
+
+## Configuración del servidor (`.env`)
+
+En el servidor el servicio usa `/var/lib/legal/.env` (se crea en el primer inicio, escuchando solo en `127.0.0.1`). Ajuste allí `LEGAL_URL_PUBLICA=https://<su-dominio>` para que la extensión descargada apunte al dominio HTTPS y `LEGAL_SGD_SIMULADO=no` en producción; luego `sudo systemctl restart legal`. La base de datos nueva es `/var/lib/legal/legal.db` y empieza vacía (usuario `admin`, clave inicial `admin`, que se pide cambiar).

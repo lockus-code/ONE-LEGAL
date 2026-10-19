@@ -11,20 +11,41 @@
     <img src="../icons/icon-32.png" alt="" width="24" height="24">
     <div class="cabecera__titulo">
       <strong>LEGAL · Conector SGD</strong>
-      <span>Vinculación de trámites documentarios</span>
+      <span id="cabecera-usuario">Indexación de trámites del SGD</span>
     </div>
-    <span class="insignia" title="La extensión solo lee información de la página. No ejecuta acciones en el SGD.">Solo lectura</span>
+    <label class="menu-cuenta oculto" id="menu-cuenta">
+      <span class="sr">Cuenta</span>
+      <select id="accion-cuenta" aria-label="Opciones de la cuenta">
+        <option value="">Cuenta ▾</option>
+        <option value="portal">Abrir el portal LEGAL</option>
+        <option value="config">Configuración</option>
+        <option value="salir">Cerrar sesión</option>
+      </select>
+    </label>
   </header>
   <div id="conexion" class="conexion oculto" role="status"></div>
 
+  <!-- Ingreso al servidor LEGAL -->
+  <form id="form-ingreso" class="panel oculto" novalidate>
+    <fieldset class="bloque">
+      <legend>Ingresar a LEGAL</legend>
+      <p class="ayuda" id="ingreso-servidor"></p>
+      <label>Usuario<input name="usuario" autocomplete="username" required></label>
+      <label>Contraseña<input name="clave" type="password" autocomplete="current-password" required></label>
+      <div id="ingreso-mensaje" class="aviso oculto" role="status"></div>
+      <div class="pie"><button class="btn btn--primario" type="submit">Ingresar</button></div>
+      <p class="ayuda">Use el mismo usuario del portal. Si es su primer ingreso, cambie la contraseña en el portal.</p>
+    </fieldset>
+  </form>
+
   <!-- Estado de la sesión SGD -->
-  <section id="estado" class="estado estado--verificando" aria-live="polite">
+  <section id="estado" class="estado estado--verificando oculto" aria-live="polite">
     <div class="estado__icono" aria-hidden="true"></div>
     <div>
       <strong id="estado-titulo">Verificando sesión en el SGD…</strong>
       <p id="estado-detalle"></p>
       <div class="acciones-linea acciones-estado">
-        <button id="btn-reverificar" class="btn btn--secundario" type="button">Volver a verificar</button>
+        <button id="btn-reverificar" class="btn btn--secundario" type="button">Volver a leer</button>
         <button id="btn-configurar" class="btn btn--secundario oculto" type="button">Abrir configuración</button>
       </div>
     </div>
@@ -32,96 +53,102 @@
 
   <main id="principal" class="oculto">
     <nav class="pestanas" role="tablist">
-      <button class="pestana activa" role="tab" data-pestana="registro" aria-selected="true">Registrar vinculación</button>
-      <button class="pestana" role="tab" data-pestana="indexados" aria-selected="false">Trámites indexados <span id="contador-indexados" class="contador">0</span></button>
+      <button class="pestana activa" role="tab" data-pestana="registro" aria-selected="true">Indexar trámite</button>
+      <button class="pestana" role="tab" data-pestana="indexados" aria-selected="false">Mis indexaciones <span id="contador-indexados" class="contador">0</span></button>
     </nav>
 
-    <!-- ============ PESTAÑA: REGISTRO ============ -->
+    <!-- ============ PESTAÑA: INDEXAR ============ -->
     <form id="form-registro" class="panel" data-panel="registro" novalidate>
       <fieldset class="bloque">
-        <legend><span class="paso">1</span> Datos del trámite SGD</legend>
+        <legend><span class="paso">1</span> Trámite del SGD</legend>
         <p class="ayuda" id="resumen-lectura"></p>
         <div id="aviso-tramite" class="aviso oculto" role="status"></div>
         <div class="rejilla">
-          <label><span data-generico="N.° de expediente" data-sedapar="N.° de trámite SGD">N.° de expediente</span><input name="nroExpediente" autocomplete="off"></label>
-          <label><span data-generico="N.° de registro / CUT" data-sedapar="ID interno SGD">N.° de registro / CUT</span><input name="nroRegistro" autocomplete="off"></label>
+          <label>N.° de trámite<input name="nroTramite" autocomplete="off"></label>
+          <label>ID interno SGD<input name="idInterno" autocomplete="off"></label>
+          <label class="ancho">Asunto del trámite (leído del SGD)<textarea name="asuntoSgd" rows="3"></textarea></label>
+          <label>Fecha de ingreso (inicio del proceso)<input name="fechaIngresoSgd" autocomplete="off"></label>
           <label data-solo="generico">Tipo de documento<input name="tipoDocumento" autocomplete="off"></label>
           <label data-solo="generico">N.° de documento<input name="nroDocumento" autocomplete="off"></label>
-          <label class="ancho"><span data-generico="Asunto del documento" data-sedapar="Asunto (redáctelo usted)">Asunto del documento</span><textarea name="asunto" rows="2"></textarea></label>
-          <p class="ayuda ancho" data-solo="sedapar">Por protección de datos personales, el conector no copia el asunto, el contenido ni los datos del solicitante del SGD.</p>
           <label data-solo="generico">Remitente<input name="remitente" autocomplete="off"></label>
-          <label data-solo="generico">Dependencia de origen<input name="dependencia" autocomplete="off"></label>
-          <label><span data-generico="Fecha del documento" data-sedapar="Fecha de ingreso">Fecha del documento</span><input name="fechaDocumento" autocomplete="off"></label>
-          <label data-solo="generico">Estado en el SGD<input name="estadoSgd" autocomplete="off"></label>
+          <label data-solo="generico">Dependencia<input name="dependencia" autocomplete="off"></label>
         </div>
-        <div id="seleccion" class="aviso aviso--info oculto" data-solo="generico">
-          <span>Hay texto seleccionado en la página.</span>
-          <button type="button" class="enlace" id="btn-usar-seleccion">Usar como asunto</button>
-        </div>
-        <label class="ancho">Enlace directo al trámite en el SGD
-          <input name="enlaceSgd" type="url" required>
-        </label>
+        <label class="ancho">Enlace directo al trámite en el SGD<input name="enlaceSgd" type="url" required></label>
         <p class="ayuda" id="origen-enlace"></p>
-        <div class="acciones-linea">
-          <button type="button" class="btn btn--secundario" id="btn-releer">Volver a leer la página</button>
-        </div>
       </fieldset>
 
       <fieldset class="bloque">
-        <legend><span class="paso">2</span> Tipo de vinculación</legend>
-        <div class="segmentado" role="radiogroup">
-          <label><input type="radio" name="modo" value="anexo" checked><span>Anexar a proceso existente</span></label>
-          <label><input type="radio" name="modo" value="nuevo"><span>Generar nuevo proceso</span></label>
-        </div>
-
-        <div class="filtros">
-          <label>Categoría<select name="categoria"></select></label>
-          <label>Procedimiento<select name="procedimiento"></select></label>
-          <label class="ancho">Responsable<select name="responsable"></select></label>
-        </div>
-
-        <div id="modo-anexo">
-          <label class="ancho">Buscar por código o denominación
-            <input name="busqueda" type="search" placeholder="Ej.: PL-2026-0004 o arbitraje" autocomplete="off">
-          </label>
-          <p class="ayuda" id="resumen-busqueda"></p>
-          <ul id="lista-procesos" class="lista-procesos" role="radiogroup" aria-label="Procesos en curso"></ul>
-        </div>
-
-        <div id="modo-nuevo" class="oculto">
-          <label class="ancho">Denominación del proceso
-            <input name="denominacion" autocomplete="off" placeholder="Ej.: Recurso de apelación – Resolución N.° …">
-          </label>
-          <p class="ayuda">Código que se asignará: <strong id="codigo-nuevo">—</strong> · Estado inicial: <strong>Registrado</strong></p>
-        </div>
-      </fieldset>
-
-      <fieldset class="bloque">
-        <legend><span class="paso">3</span> Asunto de la vinculación</legend>
-        <label class="ancho">Descripción de la actuación
-          <textarea name="asuntoVinculacion" rows="3" required placeholder="Ej.: Se incorpora escrito de la parte demandante para evaluación y absolución de traslado."></textarea>
+        <legend><span class="paso">2</span> ¿Qué desea hacer?</legend>
+        <label class="ancho">Acción
+          <select name="accion" id="accion">
+            <option value="">Seleccione una acción…</option>
+            <option value="nuevo">Crear un proceso nuevo</option>
+            <option value="existente">Anexar a un proceso existente</option>
+          </select>
         </label>
+
+        <!-- Proceso nuevo -->
+        <div id="bloque-nuevo" class="oculto">
+          <label class="ancho">Elegir primero
+            <select name="criterioNuevo">
+              <option value="profesional">El profesional (luego sus vías)</option>
+              <option value="categoria">La categoría y la vía (luego el profesional)</option>
+            </select>
+          </label>
+          <div class="cascada" id="cascada-nuevo">
+            <label data-orden-profesional="1" data-orden-categoria="3">Profesional a cargo<select name="profesionalNuevo"></select></label>
+            <label data-orden-profesional="2" data-orden-categoria="1" data-solo-criterio="categoria">Categoría<select name="categoriaNuevo"></select></label>
+            <label data-orden-profesional="2" data-orden-categoria="2">Vía procedimental<select name="viaNuevo"></select></label>
+          </div>
+          <p class="ayuda" id="resumen-ciclo"></p>
+          <label class="ancho">Título del proceso
+            <input name="titulo" autocomplete="off" placeholder="Por defecto, el asunto del trámite">
+          </label>
+          <p class="ayuda">El código del proceso (PL-AAAA-NNNN) lo asigna LEGAL automáticamente.</p>
+        </div>
+
+        <!-- Proceso existente -->
+        <div id="bloque-existente" class="oculto">
+          <label class="ancho">Buscar por
+            <select name="criterioExistente">
+              <option value="profesional">Profesional a cargo</option>
+              <option value="categoria">Categoría y vía</option>
+            </select>
+          </label>
+          <div class="cascada">
+            <label data-criterio="profesional" class="ancho">Profesional<select name="profesionalExistente"></select></label>
+            <label data-criterio="categoria">Categoría<select name="categoriaExistente"></select></label>
+            <label data-criterio="categoria">Vía procedimental<select name="viaExistente"></select></label>
+          </div>
+          <label class="ancho">Filtrar por código o título<input name="busqueda" type="search" autocomplete="off" placeholder="Ej.: PL-2026-0004 o reposición"></label>
+          <label class="ancho">Proceso<select name="proceso"></select></label>
+          <p class="ayuda" id="resumen-busqueda"></p>
+          <label class="ancho">Tarea relacionada (opcional)<select name="tarea"></select></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="bloque">
+        <legend><span class="paso">3</span> Detalle de la indexación</legend>
+        <label class="ancho">Asunto o detalle propio (opcional)
+          <textarea name="detalle" rows="2" placeholder="Ej.: Cédula que notifica la admisión de la demanda."></textarea>
+        </label>
+        <p class="ayuda">Puede ser distinto del asunto del trámite; se muestra en el portal junto al documento.</p>
       </fieldset>
 
       <div id="mensaje" class="aviso oculto" role="status"></div>
-
       <footer class="pie">
-        <button type="submit" class="btn btn--primario" id="btn-registrar">Registrar vinculación</button>
+        <button type="submit" class="btn btn--primario" id="btn-registrar">Indexar en LEGAL</button>
       </footer>
     </form>
 
-    <!-- ============ PESTAÑA: INDEXADOS ============ -->
+    <!-- ============ PESTAÑA: MIS INDEXACIONES ============ -->
     <section class="panel oculto" data-panel="indexados">
-      <div class="acciones-linea">
-        <input id="filtro-indexados" type="search" placeholder="Filtrar trámites indexados…" aria-label="Filtrar trámites indexados">
-        <button type="button" class="btn btn--secundario" id="btn-exportar">Exportar para LEGAL</button>
-      </div>
+      <input id="filtro-indexados" type="search" placeholder="Filtrar…" aria-label="Filtrar indexaciones">
       <ul id="lista-indexados" class="lista-indexados"></ul>
     </section>
   </main>
 
   <script src="../shared/entorno.js"></script>
-  <script src="../shared/catalogo.js"></script>
   <script src="../shared/almacen.js"></script>
   <script src="../shared/lector.js"></script>
   <script src="../shared/lector-sedapar.js"></script>

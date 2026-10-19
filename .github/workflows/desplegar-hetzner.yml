@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Construir (go vet, pruebas y binarios)
         run: servidor/construir.sh
@@ -47,8 +47,8 @@ jobs:
         with:
           name: legal-${{ github.sha }}
           path: |
-            servidor/dist/legal-prueba-linux
-            servidor/dist/LEGAL-Prueba.exe
+            servidor/dist/legal-linux
+            servidor/dist/LEGAL.exe
             despliegue/Caddyfile
           retention-days: 14
 
@@ -79,7 +79,7 @@ jobs:
           HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
         run: |
           scp -i ~/.ssh/legal-despliegue -o StrictHostKeyChecking=yes \
-            entrega/servidor/dist/legal-prueba-linux "despliegue@${HETZNER_HOST}:entrega/legal-prueba"
+            entrega/servidor/dist/legal-linux "despliegue@${HETZNER_HOST}:entrega/legal-prueba"
           scp -i ~/.ssh/legal-despliegue -o StrictHostKeyChecking=yes \
             entrega/despliegue/Caddyfile "despliegue@${HETZNER_HOST}:entrega/Caddyfile"
 
