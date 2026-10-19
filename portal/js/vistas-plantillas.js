@@ -11,42 +11,58 @@
   /** Editor de lista de tareas/etapas. Devuelve { valor() } con el arreglo normalizado. */
   L.editorTareas = function (raiz, tareasIniciales) {
     let tareas = (tareasIniciales || []).map((t) => ({ ...t }));
+    const sinPlazo = (t) => t.plazoDias === null || t.plazoDias === undefined || t.plazoDias === '';
+    function resumen() {
+      const fijos = tareas.filter((t) => !sinPlazo(t));
+      const habiles = fijos.filter((t) => t.tipoDias !== 'calendario').reduce((n, t) => n + Number(t.plazoDias), 0);
+      const cal = fijos.filter((t) => t.tipoDias === 'calendario').reduce((n, t) => n + Number(t.plazoDias), 0);
+      return `<span class="chip">${tareas.length} tarea(s)</span>
+        <span class="chip">${fijos.length} con plazo fijo${habiles ? ` · ${habiles} d. háb.` : ''}${cal ? ` · ${cal} d. cal.` : ''}</span>
+        ${tareas.length - fijos.length ? `<span class="chip chip--advertencia">${tareas.length - fijos.length} por definir durante el proceso</span>` : ''}`;
+    }
     function pintar() {
-      raiz.innerHTML = `<div class="tabla-envoltura"><table class="tabla tabla--editor">
-        <thead><tr><th>#</th><th>Tarea</th><th>Plazo</th><th>Cuenta desde</th><th>Antecesora</th><th>Base legal</th><th></th></tr></thead>
-        <tbody>${tareas.map((t, i) => `<tr data-i="${i}">
+      raiz.innerHTML = `<div class="editor-tareas">
+        <div class="editor-tareas__resumen" data-resumen>${resumen()}</div>
+        <div class="tabla-envoltura"><table class="tabla tabla--editor">
+        <colgroup><col class="e-num"><col><col class="e-plazo"><col class="e-desde"><col class="e-ant"><col class="e-base"><col class="e-acc"></colgroup>
+        <thead><tr><th class="num">#</th><th>Tarea</th><th>Plazo</th><th>Cuenta desde</th><th>Antecesora</th><th>Base legal</th><th>Acciones</th></tr></thead>
+        <tbody>${tareas.map((t, i) => `<tr data-i="${i}" class="${sinPlazo(t) ? 'sin-plazo' : ''}">
           <td class="num">${i + 1}</td>
-          <td><input data-k="nombre" value="${esc(t.nombre)}" aria-label="Nombre de la tarea" required></td>
-          <td class="plazo-dias"><input type="number" min="0" max="3650" data-k="plazoDias" value="${t.plazoDias ?? ''}" placeholder="por definir" aria-label="Días">
-            <select data-k="tipoDias" aria-label="Tipo de días">${L.opciones([['habiles', 'hábiles'], ['calendario', 'calendario']], t.tipoDias || 'habiles')}</select></td>
-          <td><select data-k="desde" aria-label="Desde">${L.opciones([['antecesora', 'Fin de la antecesora'], ['inicio', 'Inicio del proceso']], t.desde || 'antecesora')}</select></td>
-          <td><select data-k="antecesora" aria-label="Antecesora">${L.opciones([['', i ? `La anterior (${i})` : '—'], ['-1', 'Ninguna (en paralelo)'], ...tareas.slice(0, Math.max(0, i - 1)).map((x, j) => [String(j), `${j + 1}. ${x.nombre}`])], t.antecesora === undefined || t.antecesora === null || t.antecesora === i - 1 ? '' : String(t.antecesora))}</select></td>
+          <td><input data-k="nombre" value="${esc(t.nombre)}" aria-label="Nombre de la tarea ${i + 1}" placeholder="Nombre de la tarea" required></td>
+          <td><div class="plazo-dias"><input type="number" min="0" max="3650" data-k="plazoDias" value="${t.plazoDias ?? ''}" placeholder="—" aria-label="Días de plazo" title="Vacío: por definir">
+            <select data-k="tipoDias" aria-label="Tipo de días">${L.opciones([['habiles', 'hábiles'], ['calendario', 'calendario']], t.tipoDias || 'habiles')}</select></div></td>
+          <td><select data-k="desde" aria-label="Desde">${L.opciones([['antecesora', 'Fin antecesora'], ['inicio', 'Inicio proceso']], t.desde || 'antecesora')}</select></td>
+          <td><select data-k="antecesora" aria-label="Antecesora">${L.opciones([['', i ? `La anterior (${i})` : '— (primera)'], ['-1', 'Ninguna (en paralelo)'], ...tareas.slice(0, Math.max(0, i - 1)).map((x, j) => [String(j), `${j + 1}. ${x.nombre}`])], t.antecesora === undefined || t.antecesora === null || t.antecesora === i - 1 ? '' : String(t.antecesora))}</select></td>
           <td><input data-k="referencia" value="${esc(t.referencia || '')}" placeholder="Ej.: CPC art. 478" aria-label="Base legal"></td>
-          <td class="acciones-fila"><select data-k="accion" aria-label="Acciones">${L.opciones([['subir', 'Subir'], ['bajar', 'Bajar'], ['duplicar', 'Duplicar'], ['quitar', 'Quitar']], '', '⋯')}</select></td></tr>`).join('')}</tbody></table></div>
-        <button type="button" class="btn btn--sm" data-agregar>+ Agregar tarea</button>
-        <p class="secundario">Deje el plazo vacío si se conoce recién durante el proceso (p. ej. fecha de audiencia): LEGAL alertará al profesional cuando la tarea antecesora esté en proceso o concluida.</p>`;
+          <td class="acciones-fila">
+            <button type="button" class="btn-icono" data-accion="subir" title="Subir" aria-label="Subir tarea ${i + 1}" ${i ? '' : 'disabled'}>↑</button><button type="button" class="btn-icono" data-accion="bajar" title="Bajar" aria-label="Bajar tarea ${i + 1}" ${i < tareas.length - 1 ? '' : 'disabled'}>↓</button><button type="button" class="btn-icono" data-accion="duplicar" title="Duplicar" aria-label="Duplicar tarea ${i + 1}">⧉</button><button type="button" class="btn-icono" data-accion="quitar" title="Quitar" aria-label="Quitar tarea ${i + 1}">✕</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Sin tareas. Agregue la primera o cargue las etapas base de la vía.</td></tr>'}</tbody></table></div>
+        <div class="editor-tareas__pie"><button type="button" class="btn btn--sm" data-agregar>+ Agregar tarea</button>
+        <p class="secundario">Las filas resaltadas no tienen plazo: se define durante el proceso (p. ej. fecha de audiencia). LEGAL alertará cuando la antecesora esté en proceso y, con mayor prioridad, cuando finalice sin que la tarea tenga plazo.</p></div></div>`;
+      L.rotularTablas(raiz);
     }
     raiz.addEventListener('input', (ev) => {
       const tr = ev.target.closest('tr[data-i]');
-      if (!tr || ev.target.dataset.k === 'accion') return;
+      if (!tr) return;
       const t = tareas[Number(tr.dataset.i)];
       const k = ev.target.dataset.k;
-      if (k === 'plazoDias') t.plazoDias = ev.target.value === '' ? null : parseInt(ev.target.value, 10);
+      if (k === 'plazoDias') { t.plazoDias = ev.target.value === '' ? null : parseInt(ev.target.value, 10); tr.classList.toggle('sin-plazo', sinPlazo(t)); }
       else if (k === 'antecesora') t.antecesora = ev.target.value === '' ? null : parseInt(ev.target.value, 10);
       else t[k] = ev.target.value;
-    });
-    raiz.addEventListener('change', (ev) => {
-      if (ev.target.dataset.k !== 'accion') return;
-      const i = Number(ev.target.closest('tr').dataset.i);
-      const a = ev.target.value;
-      if (a === 'subir' && i > 0) [tareas[i - 1], tareas[i]] = [tareas[i], tareas[i - 1]];
-      if (a === 'bajar' && i < tareas.length - 1) [tareas[i + 1], tareas[i]] = [tareas[i], tareas[i + 1]];
-      if (a === 'duplicar') tareas.splice(i + 1, 0, { ...tareas[i], nombre: `${tareas[i].nombre} (copia)` });
-      if (a === 'quitar') tareas.splice(i, 1);
-      if (a) tareas.forEach((t) => { t.antecesora = null; }); // al reordenar, cada tarea vuelve a depender de la anterior
-      pintar();
+      L.$('[data-resumen]', raiz).innerHTML = resumen();
     });
     raiz.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-accion]');
+      if (b) {
+        const i = Number(b.closest('tr').dataset.i);
+        const a = b.dataset.accion;
+        if (a === 'subir' && i > 0) [tareas[i - 1], tareas[i]] = [tareas[i], tareas[i - 1]];
+        if (a === 'bajar' && i < tareas.length - 1) [tareas[i + 1], tareas[i]] = [tareas[i], tareas[i + 1]];
+        if (a === 'duplicar') tareas.splice(i + 1, 0, { ...tareas[i], nombre: `${tareas[i].nombre} (copia)` });
+        if (a === 'quitar') tareas.splice(i, 1);
+        tareas.forEach((t) => { t.antecesora = null; }); // al reordenar, cada tarea vuelve a depender de la anterior
+        pintar();
+        return;
+      }
       if (!ev.target.hasAttribute('data-agregar')) return;
       tareas.push({ nombre: '', plazoDias: null, tipoDias: 'habiles', desde: 'antecesora' });
       pintar();
@@ -55,8 +71,8 @@
     });
     pintar();
     return {
-      valor: () => tareas.map((t) => ({ nombre: (t.nombre || '').trim(), plazoDias: t.plazoDias ?? null, tipoDias: t.tipoDias || 'habiles', desde: t.desde || 'antecesora', antecesora: t.antecesora ?? undefined, referencia: t.referencia || '', descripcion: t.descripcion || '' })),
-      reemplazar: (nuevas) => { tareas = nuevas.map((t) => ({ ...t })); pintar(); }
+      valor: () => tareas.map((t) => ({ nombre: (t.nombre || '').trim(), plazoDias: t.plazoDias ?? null, tipoDias: t.tipoDias || 'habiles', desde: t.desde || 'antecesora', antecesora: t.antecesora ?? undefined, referencia: t.referencia || '', descripcion: t.descripcion || '', checklist: t.checklist || undefined })),
+      reemplazar: (nuevas) => { tareas = (nuevas || []).map((t) => ({ ...t })); pintar(); }
     };
   };
 
@@ -134,11 +150,11 @@
           ${aprobada.length && p.estado !== 'aprobada' ? `<section><h3 class="subtitulo">Versión aprobada vigente</h3><div class="tabla-envoltura">${tabla(aprobada)}</div></section>` : ''}
         </div>
         ${p.aprobadaPor ? `<p class="secundario">Última aprobación: ${esc(p.aprobadaPor)} · ${L.fmtFechaHora(p.aprobadaEn)}</p>` : ''}
-        ${decidir ? `<form id="f-rev" class="formulario">
+        ${decidir ? `<form id="f-rev" class="formulario formulario--revision">
           <label>Observación (obligatoria para observar; opcional al aprobar)<textarea name="obs" rows="3" placeholder="Ej.: Defina el plazo de la etapa de alegatos."></textarea></label>
           <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button type="button" class="btn" data-decision="observar">Observar</button><button type="button" class="btn btn--primario" data-decision="aprobar">Aprobar</button></div>
         </form>` : ''}
-      </div>`);
+      </div>`, { ancho: Boolean(aprobada.length && p.estado !== 'aprobada') });
     L.$$('[data-decision]', c).forEach((b) => b.addEventListener('click', async () => {
       const obs = L.$('#f-rev', c).obs.value;
       try {
@@ -157,15 +173,16 @@
     const c = L.modal(`${L.cabModal(nueva ? 'Nueva plantilla' : 'Editar plantilla', nueva ? 'Una plantilla por vía procedimental' : esc(L.nombreVia(p.via)))}
       <form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-plt" novalidate>
         ${esAdmin ? `<label>Profesional<select name="prof" ${nueva ? '' : 'disabled'}>${L.opciones(L.profesionales().map((u) => [u.id, u.nombre]), st.profesionalId, 'Seleccione…')}</select></label>` : ''}
-        <div class="doble">
+        <div class="campos-linea">
           <label>Categoría<select name="categoria" ${nueva ? '' : 'disabled'}>${L.opciones(L.categorias().map((x) => [x.codigo, x.nombre]), st.categoria, 'Seleccione…')}</select></label>
           <label>Vía procedimental<select name="via" ${nueva ? '' : 'disabled'}></select></label>
+          <label>Nombre de la plantilla<input name="nombre" value="${esc((p && p.nombre) || '')}" placeholder="Por defecto, el nombre de la vía"></label>
         </div>
-        <label>Nombre de la plantilla<input name="nombre" value="${esc((p && p.nombre) || '')}" placeholder="Por defecto, el nombre de la vía"></label>
-        <div class="acciones-linea"><select id="cargar" aria-label="Cargar tareas">${L.opciones([['base', 'Reemplazar por las etapas normativas base de la vía'], ...L.D.plantillas.filter((x) => !p || x.id !== p.id).map((x) => [x.id, `Copiar tareas de «${x.nombre}»${esAdmin ? ` (${L.nombre(x.profesionalId)})` : ''}`])], '', 'Cargar tareas desde…')}</select></div>
+        <div class="barra-acciones barra-acciones--editor"><h3 class="subtitulo">Ciclo de tareas</h3>
+          <select id="cargar" aria-label="Cargar tareas">${L.opciones([['base', 'Reemplazar por las etapas normativas base de la vía'], ...L.D.plantillas.filter((x) => !p || x.id !== p.id).map((x) => [x.id, `Copiar tareas de «${x.nombre}»${esAdmin ? ` (${L.nombre(x.profesionalId)})` : ''}`])], '', 'Cargar tareas desde…')}</select></div>
         <div id="editor"></div>
         <div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar y enviar a aprobación</button></div>
-      </form>`);
+      </form>`, { ancho: true });
     const f = L.$('#f-plt', c);
     const editor = L.editorTareas(L.$('#editor', c), (p && p.tareas) || []);
     const pintarVias = () => {

@@ -31,9 +31,24 @@
   };
 
   L.recargar = async function () {
-    L.D = await L.api('GET', '/api/datos');
+    L.D = L.normalizar(await L.api('GET', '/api/datos'));
     L.indexar();
     return L.D;
+  };
+
+  /** Las listas vacías pueden llegar como null (documentos antiguos o editados a mano): se vuelven []. */
+  const lista = (x) => (Array.isArray(x) ? x : []);
+  L.normalizar = function (d) {
+    ['usuarios', 'procesos', 'tareas', 'tramites', 'solicitudes', 'plantillas', 'alertas', 'feriados'].forEach((k) => { d[k] = lista(d[k]); });
+    d.taxonomia = d.taxonomia || {};
+    d.taxonomia.categorias = lista(d.taxonomia.categorias);
+    d.taxonomia.categorias.forEach((c) => { c.vias = lista(c.vias); c.vias.forEach((v) => { v.etapas = lista(v.etapas); }); });
+    d.plantillas.forEach((p) => { p.tareas = lista(p.tareas); });
+    d.config = d.config || {};
+    d.config.feriadosAdicionales = lista(d.config.feriadosAdicionales);
+    d.servidor = d.servidor || {};
+    d.servidor.sgdUrls = lista(d.servidor.sgdUrls);
+    return d;
   };
 
   // Índices para búsquedas rápidas.
@@ -110,6 +125,8 @@
   L.es = (...roles) => roles.includes(L.D.usuario.rol);
   L.puedeEditarTareas = (p) => p && p.estado !== 'Finalizado' && (L.es('admin') || (L.es('profesional') && p.profesionalId === L.yo().id));
   L.abierta = (t) => t.estado !== 'Finalizada';
+  /** Alertas de tareas sin fecha límite (antecesora en proceso o ya finalizada). */
+  L.esAlertaPlazo = (a) => a.tipo === 'plazo-no-definido' || a.tipo === 'sucesora-sin-plazo';
 
   /** Barra de avance con el porcentaje a su lado. */
   L.avanceHtml = (frac, texto) => `<span class="avance"><span class="progreso"><span style="width:${Math.round(frac * 100)}%"></span></span><span class="avance__pct">${texto ?? L.pct(frac)}</span></span>`;
@@ -184,9 +201,10 @@
   };
 
   /** Abre un modal. `html` incluye cabecera y cuerpo; devuelve el contenedor. */
-  L.modal = function (html, { angosto = false, foco = true } = {}) {
+  L.modal = function (html, { angosto = false, ancho = false, foco = true } = {}) {
     const m = L.$('#modal');
     L.$('.modal__caja', m).classList.toggle('modal__caja--angosta', angosto);
+    L.$('.modal__caja', m).classList.toggle('modal__caja--ancha', ancho);
     L.$('#modal-contenido').innerHTML = html;
     m.hidden = false;
     L.rotularTablas(L.$('#modal-contenido'));

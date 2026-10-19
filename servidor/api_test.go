@@ -175,8 +175,10 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t2["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusConflict {
 		t.Fatalf("debía exigir que la antecesora finalice: %d", cod)
 	}
-	// Retroceder exige justificación.
-	prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnRevision})
+	// Retroceder exige justificación. Un cambio sin sucesoras habilitadas responde una lista vacía, no null.
+	if _, r := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnRevision}); r["sucesoras"] == nil {
+		t.Fatalf("«sucesoras» debía ser una lista vacía: %v", r)
+	}
 	if cod, _ := prof.llamar("PUT", "/api/tareas/"+t1["id"].(string), map[string]any{"estado": TareaEnProceso}); cod != http.StatusUnprocessableEntity {
 		t.Fatalf("el retroceso sin justificación debía rechazarse: %d", cod)
 	}
@@ -211,8 +213,8 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 		t.Fatalf("finalizar tarea: %d %v", cod, r)
 	}
 	_, d = prof.llamar("GET", "/api/datos", nil)
-	if !hayAlerta(d, "plazo-no-definido", t2["id"].(string)) {
-		t.Fatalf("debía alertar que la audiencia no tiene plazo: %v", lista(d, "alertas"))
+	if !hayAlerta(d, "sucesora-sin-plazo", t2["id"].(string)) || hayAlerta(d, "plazo-no-definido", t2["id"].(string)) {
+		t.Fatalf("debía alertar que la antecesora finalizó y la audiencia no tiene plazo: %v", lista(d, "alertas"))
 	}
 
 	// El asistente solicita la definición del plazo y el profesional lo define en bloque.
@@ -226,7 +228,7 @@ func TestFlujoCompletoDeIndexacion(t *testing.T) {
 		t.Fatalf("plazos en bloque: %d %v", cod, r)
 	}
 	_, d = prof.llamar("GET", "/api/datos", nil)
-	if hayAlerta(d, "plazo-no-definido", t2["id"].(string)) || hayAlerta(d, "solicitud-plazo", t2["id"].(string)) {
+	if hayAlerta(d, "sucesora-sin-plazo", t2["id"].(string)) || hayAlerta(d, "solicitud-plazo", t2["id"].(string)) {
 		t.Fatalf("las alertas de plazo debían resolverse: %v", lista(d, "alertas"))
 	}
 

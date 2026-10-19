@@ -221,7 +221,7 @@
     render(v) {
       const activos = L.D.procesos.filter((p) => p.estado === 'Activo' && L.puedeEditarTareas(p));
       const ids = new Set(activos.map((p) => p.id));
-      const alertaPor = new Set(L.D.alertas.filter((a) => a.tipo === 'plazo-no-definido').map((a) => a.tareaId));
+      const alertaPor = new Set(L.D.alertas.filter(L.esAlertaPlazo).map((a) => a.tareaId));
       const solicitadas = new Set(L.D.solicitudes.filter((s) => s.estado === 'pendiente').map((s) => s.tareaId));
       const tareas = L.D.tareas.filter((t) => ids.has(t.procesoId) && L.abierta(t) && (!this.soloPendientes || (!t.fechaLimite && (t.plazoDias === null || t.plazoDias === undefined))))
         .sort((a, b) => Number(alertaPor.has(b.id) || solicitadas.has(b.id)) - Number(alertaPor.has(a.id) || solicitadas.has(a.id)) || a.procesoId.localeCompare(b.procesoId) || a.orden - b.orden);

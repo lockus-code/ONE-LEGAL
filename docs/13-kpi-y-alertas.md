@@ -12,6 +12,9 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 | Tarea habilitada | Tarea sin antecesora o cuya antecesora finalizó; es la única que aparece en el tablero y la única que puede avanzar. |
 | Plazo por definir | Tarea abierta sin fecha límite ni plazo relativo, cuya antecesora está *En proceso*, *En revisión* o *Finalizada* (o que ya está habilitada). |
 | Cumplimiento de plazos | Tareas finalizadas en o antes de su fecha límite ÷ tareas finalizadas que tenían fecha límite (año en curso). |
+| Desempeño del cronograma (SPI) | Aproximación por tareas del índice del PMBOK: tareas finalizadas ÷ tareas cuya fecha límite ya llegó (valor ganado ÷ valor planificado). 1,00 = al día; < 0,90 = atraso. |
+| Avance real / plan | Real: tareas finalizadas ÷ total del ciclo. Plan: tareas cuya fecha límite ya llegó ÷ total del ciclo. Real < plan = proceso atrasado. |
+| Salud del proceso (semáforo) | **Rojo · en riesgo**: tareas vencidas o antecesora finalizada sin plazo por más de N días hábiles. **Ámbar · atención**: por vencer, sin plazo, solicitud de plazo o sin movimiento. **Verde · en plazo**: ninguna de las anteriores. Gris: suspendido o finalizado. |
 | Oportunidad de indexación | Días entre la fecha de ingreso del trámite al SGD y su indexación en LEGAL (mediana). |
 | Días hábiles | Lunes a viernes, sin feriados nacionales del Perú (incluidos Jueves y Viernes Santo) ni los días no laborables registrados por el administrador. Un plazo en días calendario que vence en día inhábil se corre al siguiente hábil. |
 
@@ -19,14 +22,18 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 
 | Indicador | Fórmula | Meta sugerida | Para qué sirve |
 |---|---|---|---|
-| Procesos activos | Procesos en estado *Activo* (+ nuevos del mes) | — | Volumen de la cartera |
+| Salud de la cartera | Procesos activos en rojo / ámbar / verde (barra apilada en la cabecera) | 0 en rojo | Lectura ejecutiva del estado |
+| Procesos activos · en riesgo | Procesos *Activos* (+ nuevos del mes, suspendidos); los que están en rojo | — | Volumen y exposición |
+| Desempeño del cronograma (SPI) | Ver conceptos | ≥ 0,90 | Atraso de la cartera frente a su plan |
+| Plantillas por aprobar | Plantillas enviadas pendientes de revisión | 0 | Que los profesionales no esperen |
 | Finalizados en el año · ciclo medio | Procesos finalizados en el año; promedio de días inicio → fin | Reducir el ciclo por vía | Productividad y duración |
 | Cumplimiento de plazos | Ver conceptos | ≥ 90 % (alerta visual < 80 %) | Calidad del seguimiento |
 | Tareas vencidas | Conteo; y las que vencen en ≤ N días hábiles | 0 | Riesgo procesal inmediato |
 | Plazos por definir | Conteo de alertas «plazo no definido» | 0 | Disciplina de planificación |
 | Trámites SGD indexados · oportunidad | Indexaciones de los últimos 30 días; mediana de oportunidad | ≤ 1 día | Que ningún documento quede sin registrar |
 | Procesos por categoría y por vía | Distribución de procesos activos | — | Especialización y demanda |
-| Carga y desempeño por profesional | Activos, tareas abiertas, vencidas, por definir, cumplimiento, resolución media | Balance de carga | Redistribuir procesos |
+| Desempeño por profesional (desplegable) | Por profesional: semáforo de sus procesos, activos, tareas abiertas, vencidas, sin plazo, cumplimiento y SPI; al desplegarlo, cada proceso con su salud, avance real/plan, tarea en curso y próximo vencimiento. Ordenado por riesgo | Balance de carga | Redistribuir procesos y priorizar seguimiento |
+| Alertas por prioridad · agenda de la cartera | Alertas agrupadas por nivel; plazos vencidos, por vencer, sin plazo y próximos 30 días con su profesional | — | Seguimiento semanal |
 | Trámites por semana | Indexaciones por semana (8 semanas) | — | Tendencia de ingreso |
 
 ## KPI del profesional (mi panel)
@@ -39,7 +46,9 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 | Plazos por definir · solicitudes | Alertas «plazo no definido»; solicitudes del asistente pendientes | 0 |
 | Cumplimiento de plazos | Ver conceptos (solo sus tareas) | ≥ 90 % |
 | Resolución media | Promedio de días entre inicio y fin de sus tareas finalizadas | Reducir |
-| Avance por proceso | Tareas finalizadas ÷ total del ciclo | — |
+| Desempeño del cronograma (SPI) | Ver conceptos (solo sus tareas) | ≥ 0,90 |
+| Agenda de plazos | Vencidas, por vencer, sin plazo y próximos 30 días (desplegables) | — |
+| Mis procesos activos (desplegable) | Salud, avance real/plan y tarea en curso; al desplegar, el ciclo completo de tareas | — |
 
 ## KPI del asistente administrativo (mi panel)
 
@@ -58,7 +67,8 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 |---|---|---|---|
 | Tarea vencida | Crítica | Tarea abierta con fecha límite < hoy | Profesional a cargo, asistente, gerente, administrador |
 | Tarea por vencer | Alta | Vence en ≤ N días hábiles | Ídem |
-| Plazo no definido | Alta si la tarea está en proceso; media si solo avanzó la antecesora | Sin fecha ni plazo relativo y antecesora en proceso/finalizada | Ídem |
+| Antecesora finalizada, tarea sin plazo | Alta; **crítica** si lleva más de N días hábiles así | La antecesora finalizó y la tarea que la continúa no tiene fecha límite ni plazo relativo | Ídem |
+| Plazo no definido | Alta si la tarea ya está habilitada (p. ej. la primera del ciclo); media si la antecesora está en proceso | Sin fecha ni plazo relativo | Ídem |
 | Solicitud de plazo | Alta | El asistente o el gerente pidió definir el plazo; se atiende sola cuando el profesional lo define | Destinatario, remitente, gerente, administrador |
 | Proceso sin movimiento | Media | Sin cambios en tareas ni documentos SGD por ≥ M días (30 por defecto) | Profesional, asistente, gerente, administrador |
 | Carga crítica | Alta | Un profesional con ≥ U % de sus tareas abiertas vencidas (20 % por defecto) | Gerente, administrador |
@@ -72,5 +82,5 @@ Los indicadores se calculan en el portal con los datos de la base de datos; las 
 
 1. Cada tarea de la plantilla tiene plazo fijo (N días hábiles o calendario, contados desde el inicio del proceso o desde que concluye la antecesora) o queda **por definir**.
 2. Al finalizar una tarea, sus sucesoras quedan **habilitadas** (*Por hacer*) desde esa fecha y, si tienen plazo relativo, LEGAL calcula su fecha límite.
-3. Si la sucesora no tiene plazo, se genera la alerta «plazo no definido». El profesional la resuelve en **Plazos por definir**, donde puede escribir varias fechas exactas o plazos en días y guardarlas de una vez, o desde la tabla del proceso.
+3. Mientras la antecesora está en proceso, una sucesora sin plazo genera la alerta «plazo no definido» (aviso anticipado). Cuando la antecesora **finaliza** y la sucesora sigue sin plazo, la alerta pasa a «antecesora finalizada, tarea sin plazo» (alta; crítica tras N días hábiles) y la ficha del tablero lo destaca en rojo. El profesional la resuelve en **Plazos por definir**, donde puede escribir varias fechas exactas o plazos en días y guardarlas de una vez, o desde la tabla del proceso.
 4. El asistente o el gerente pueden **solicitar la definición del plazo**; la solicitud se cierra sola cuando el profesional lo define.

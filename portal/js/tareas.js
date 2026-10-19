@@ -36,7 +36,8 @@
     }
     try {
       const r = await L.api('PUT', `/api/tareas/${t.id}`, { estado, justificacion });
-      L.notificar(r.sucesoras.length ? `Tarea en «${COLUMNAS[estado]}». Se habilitó: ${r.sucesoras.map((x) => x.nombre).join(', ')}.` : `Tarea movida a «${COLUMNAS[estado]}».`);
+      const habilitadas = r.sucesoras || [];
+      L.notificar(habilitadas.length ? `Tarea en «${COLUMNAS[estado]}». Se habilitó: ${habilitadas.map((x) => x.nombre).join(', ')}.` : `Tarea movida a «${COLUMNAS[estado]}».`);
       return true;
     } catch (e) { L.error(e); return false; }
   };
@@ -66,6 +67,10 @@
   // ------------------------------------------------------------ fichas
   function chipPlazo(t) {
     const v = L.vencimiento(t);
+    // La antecesora ya finalizó y la tarea corre sin fecha límite: se destaca como alerta.
+    if (v.tipo === 'sin-plazo' && L.D.alertas.some((a) => a.tipo === 'sucesora-sin-plazo' && a.tareaId === t.id)) {
+      return `<span class="plazo plazo--vencida" title="La tarea antecesora finalizó y esta tarea aún no tiene fecha límite">⚠ Sin plazo · antecesora finalizada</span>`;
+    }
     const clase = { vencida: 'plazo--vencida', tarde: 'plazo--vencida', proxima: 'plazo--proxima', 'sin-plazo': 'plazo--sin', vigente: 'plazo--ok', cumplida: 'plazo--ok', relativo: 'plazo--sin' }[v.tipo] || '';
     const icono = { vencida: '⚠', tarde: '⚠', proxima: '◷', 'sin-plazo': '?', vigente: '📅', cumplida: '✓', relativo: '⧗' }[v.tipo] || '';
     const fecha = t.fechaLimite && L.abierta(t) ? ` · ${L.fmtFecha(t.fechaLimite)}` : '';
@@ -92,7 +97,7 @@
 
   // ------------------------------------------------------------ tablero
   L.vistas.tareas = {
-    titulo: 'Mis tareas', subtitulo: 'Tablero de tareas habilitadas · arrastre las fichas para cambiar su estado',
+    titulo: 'Mis tareas', subtitulo: 'Tablero de tareas habilitadas · arrastre las fichas (o Mayús + ← →) para cambiar su estado',
     filtros: { proceso: '', texto: '', foco: '' },
     render(v) {
       const f = this.filtros;
@@ -115,8 +120,9 @@
         </div>
         <div class="tablero" role="list">${L.ESTADOS_TAREA.map((e) => {
           const lista = visibles.filter((t) => t.estado === e).sort(ordenar);
+          const riesgo = lista.filter((t) => ['vencida', 'sin-plazo'].includes(L.vencimiento(t).tipo)).length;
           return `<section class="tablero__col" data-estado="${esc(e)}" role="listitem" aria-label="${esc(COLUMNAS[e])}">
-            <header class="tablero__cab"><h2>${esc(COLUMNAS[e])}</h2><span class="cuenta">${lista.length}</span></header>
+            <header class="tablero__cab"><h2>${esc(COLUMNAS[e])}</h2><span class="tablero__cuentas">${riesgo && e !== 'Finalizada' ? `<span class="cuenta cuenta--riesgo" title="Vencidas o sin plazo">⚠ ${riesgo}</span>` : ''}<span class="cuenta" title="Tareas en la columna">${lista.length}</span></span></header>
             <div class="tablero__lista">${lista.map((t) => ficha(t, L.puedeEditarTareas(L.D.porProceso[t.procesoId]))).join('') || `<p class="tablero__vacio">${e === 'Finalizada' ? 'Tareas finalizadas en los últimos 30 días' : 'Arrastre aquí'}</p>`}</div>
           </section>`;
         }).join('')}</div>`;
@@ -154,7 +160,18 @@
         if (await L.moverTarea(t, col.dataset.estado)) await L.refrescar();
       });
       v.addEventListener('click', (ev) => { const c = ev.target.closest('.ficha'); if (c) L.abrirTarea(c.dataset.tarea); });
-      v.addEventListener('keydown', (ev) => { const c = ev.target.closest('.ficha'); if (c && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); L.abrirTarea(c.dataset.tarea); } });
+      v.addEventListener('keydown', async (ev) => {
+        const c = ev.target.closest('.ficha');
+        if (!c || document.querySelector('.modal:not([hidden])')) return; // con un diálogo abierto, el tablero no reacciona
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); L.abrirTarea(c.dataset.tarea); return; }
+        // Mayús + ← / → mueve la ficha a la columna vecina (alternativa al arrastre).
+        if (ev.shiftKey && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') && c.hasAttribute('draggable')) {
+          ev.preventDefault();
+          const t = L.D.porTarea[c.dataset.tarea];
+          const destino = L.ESTADOS_TAREA[orden(t.estado) + (ev.key === 'ArrowRight' ? 1 : -1)];
+          if (destino && (await L.moverTarea(t, destino))) { await L.refrescar(); const f = L.$(`.ficha[data-tarea="${t.id}"]`); if (f) f.focus(); }
+        }
+      });
     }
   };
 

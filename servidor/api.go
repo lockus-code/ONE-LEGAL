@@ -359,7 +359,14 @@ func (s *Servidor) manejarTaxonomia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	codigos := map[string]bool{}
-	for _, c := range t.Categorias {
+	if t.Categorias == nil {
+		t.Categorias = []Categoria{}
+	}
+	for i := range t.Categorias {
+		c := &t.Categorias[i]
+		if c.Vias == nil { // listas vacías como [] y no null: el portal lee su longitud
+			c.Vias = []Via{}
+		}
 		if strings.TrimSpace(c.Codigo) == "" || strings.TrimSpace(c.Nombre) == "" {
 			rechazar(w, http.StatusUnprocessableEntity, "Cada categoría necesita código y nombre.")
 			return
@@ -369,7 +376,11 @@ func (s *Servidor) manejarTaxonomia(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		codigos[c.Codigo] = true
-		for _, v := range c.Vias {
+		for j := range c.Vias {
+			v := &c.Vias[j]
+			if v.Etapas == nil {
+				v.Etapas = []Etapa{}
+			}
 			if strings.TrimSpace(v.Codigo) == "" || strings.TrimSpace(v.Nombre) == "" {
 				rechazar(w, http.StatusUnprocessableEntity, "Cada vía necesita código y nombre ("+c.Nombre+").")
 				return
@@ -893,13 +904,15 @@ func (s *Servidor) manejarTarea(w http.ResponseWriter, r *http.Request) {
 			t.Comentarios = append(t.Comentarios, Evento{Fecha: ahora(), Usuario: u.Usuario, Texto: c})
 		}
 		cal := s.calendario()
-		var sucesoras []Tarea
+		sucesoras := []Tarea{} // nunca null en el JSON: el portal lee su longitud
 		if sol.Estado != nil {
 			var err error
-			if sucesoras, err = s.cambiarEstadoTarea(&t, *sol.Estado, sol.Justificacion, u.Usuario); err != nil {
+			habilitadas, err := s.cambiarEstadoTarea(&t, *sol.Estado, sol.Justificacion, u.Usuario)
+			if err != nil {
 				responderError(w, err)
 				return
 			}
+			sucesoras = append(sucesoras, habilitadas...)
 		}
 		if err := s.aplicarPlazo(&t, sol.entradaPlazo, u.Usuario, cal); err != nil {
 			responderError(w, err)

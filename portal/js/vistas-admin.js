@@ -112,8 +112,8 @@
           </tbody></table></div></details>`).join('')}`;
       L.$$('details.categoria', v).forEach((d) => d.addEventListener('toggle', () => { if (d.open) this.abiertas.add(d.dataset.codigo); else this.abiertas.delete(d.dataset.codigo); }));
       const guardar = async () => { try { await L.api('PUT', '/api/taxonomia', tax); L.notificar('Taxonomía guardada.'); await L.refrescar(); } catch (e) { L.error(e); } };
-      const pedir = (titulo, campos, alGuardar) => {
-        const c = L.modal(`${L.cabModal(titulo)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-x">${campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}<div id="editor-etapas"></div><div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`);
+      const pedir = (titulo, campos, alGuardar, conEtapas = false) => {
+        const c = L.modal(`${L.cabModal(titulo)}<form class="modal__cuerpo modal__cuerpo--simple formulario" id="f-x">${conEtapas ? `<div class="campos-linea">${campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}</div><h3 class="subtitulo">Etapas normativas base</h3>` : campos.map(([k, t, val, dis]) => `<label>${t}<input name="${k}" value="${esc(val || '')}" ${dis ? 'disabled' : ''}></label>`).join('')}<div id="editor-etapas"></div><div class="modal__pie" style="padding:0"><button type="button" class="btn" data-cerrar>Cancelar</button><button class="btn btn--primario">Guardar</button></div></form>`, { ancho: conEtapas, angosto: !conEtapas });
         return { c, f: L.$('#f-x', c), alGuardar };
       };
       L.$('#btn-cat', v).addEventListener('click', () => {
@@ -141,7 +141,7 @@
         }
       });
       function editarVia(c, x) {
-        const { f, c: caja } = pedir(x ? 'Editar vía procedimental' : `Nueva vía en ${c.nombre}`, [['codigo', 'Código (p. ej. CIV-XYZ)', x && x.codigo, Boolean(x)], ['nombre', 'Nombre', x && x.nombre], ['baseLegal', 'Base legal', x && x.baseLegal]]);
+        const { f, c: caja } = pedir(x ? 'Editar vía procedimental' : `Nueva vía en ${c.nombre}`, [['codigo', 'Código (p. ej. CIV-XYZ)', x && x.codigo, Boolean(x)], ['nombre', 'Nombre', x && x.nombre], ['baseLegal', 'Base legal', x && x.baseLegal]], null, true);
         const editor = L.editorTareas(L.$('#editor-etapas', caja), x ? x.etapas : []);
         f.addEventListener('submit', (ev) => {
           ev.preventDefault();

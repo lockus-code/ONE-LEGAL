@@ -249,8 +249,25 @@ func calcularAlertas(u *Usuario, procesos []Proceso, tareas []Tarea, tramites []
 		if t.PlazoDias != nil && t.FechaInicio == "" {
 			continue
 		}
-		// Sin plazo: se alerta cuando la antecesora está en proceso o finalizada (o la tarea ya está habilitada).
 		ant := porTarea[t.AntecesoraID]
+		// La antecesora finalizó y la tarea que la continúa corre sin fecha límite: el plazo
+		// ya debería estar controlado. Pasa a crítica si lleva más de N días hábiles así.
+		if ant != nil && ant.Estado == TareaFinalizada {
+			a := base
+			a.Tipo, a.Nivel, a.Fecha = "sucesora-sin-plazo", "alta", ant.FechaFin
+			dias := 0
+			if ant.FechaFin != "" {
+				dias = cal.HabilesEntre(ant.FechaFin, hoyISO)
+			}
+			if dias > cfg.DiasAlertaPorVencer {
+				a.Nivel = "critica"
+			}
+			a.Titulo = "Antecesora finalizada, tarea sin plazo: " + t.Nombre
+			a.Detalle = fmt.Sprintf("%s · «%s» finalizó el %s y «%s» aún no tiene fecha límite (%d día(s) hábil(es) sin plazo)", etiqueta(p), ant.Nombre, valorO(ant.FechaFin, "—"), t.Nombre, dias)
+			agregar(a)
+			continue
+		}
+		// Sin plazo: se alerta cuando la antecesora está en proceso (o la tarea ya está habilitada).
 		habilitada := t.FechaInicio != "" || t.Estado != TareaPendiente
 		if habilitada || (ant != nil && ant.Estado != TareaPendiente) {
 			a := base

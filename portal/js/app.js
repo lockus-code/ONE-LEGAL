@@ -87,7 +87,7 @@
   function pintarMenu() {
     const actual = L.ruta;
     const alertas = L.D.alertas.filter((a) => a.nivel !== 'info').length;
-    $('#menu').innerHTML = MENUS[L.rol()].map(([grupo, items]) => `<div class="menu__grupo">${esc(grupo)}</div>${items.map(([k, t]) => `<a href="#${k}" ${actual === k || (actual === 'proceso' && k === 'procesos') ? 'aria-current="page"' : ''}>${esc(t)}${k === 'alertas' && alertas ? ` <span class="cuenta">${alertas}</span>` : ''}${k === 'plazos' && L.D.alertas.some((a) => a.tipo === 'plazo-no-definido') ? ` <span class="cuenta">${L.D.alertas.filter((a) => a.tipo === 'plazo-no-definido').length}</span>` : ''}${k === 'plantillas' && L.es('gerente', 'admin') && L.D.plantillas.some((x) => x.estado === 'pendiente') ? ` <span class="cuenta">${L.D.plantillas.filter((x) => x.estado === 'pendiente').length}</span>` : ''}</a>`).join('')}`).join('');
+    $('#menu').innerHTML = MENUS[L.rol()].map(([grupo, items]) => `<div class="menu__grupo">${esc(grupo)}</div>${items.map(([k, t]) => `<a href="#${k}" ${actual === k || (actual === 'proceso' && k === 'procesos') ? 'aria-current="page"' : ''}>${esc(t)}${k === 'alertas' && alertas ? ` <span class="cuenta">${alertas}</span>` : ''}${k === 'plazos' && L.D.alertas.some(L.esAlertaPlazo) ? ` <span class="cuenta">${L.D.alertas.filter(L.esAlertaPlazo).length}</span>` : ''}${k === 'plantillas' && L.es('gerente', 'admin') && L.D.plantillas.some((x) => x.estado === 'pendiente') ? ` <span class="cuenta">${L.D.plantillas.filter((x) => x.estado === 'pendiente').length}</span>` : ''}</a>`).join('')}`).join('');
     const u = L.yo();
     $('#usuario-nombre').textContent = u.nombre;
     $('#usuario-rol').textContent = L.ROLES[u.rol];
@@ -135,7 +135,7 @@
       const activo = document.activeElement;
       if (activo && activo.closest('#vista') && /INPUT|TEXTAREA|SELECT/.test(activo.tagName)) return;
       try {
-        const d = await L.api('GET', '/api/datos');
+        const d = L.normalizar(await L.api('GET', '/api/datos'));
         const f = firmaDatos(d);
         if (f !== firma) { firma = f; L.D = d; L.indexar(); await L.pintar(); } else { pintarMenu(); }
       } catch (e) { $('#estado-bd').textContent = 'Sin conexión con el servidor'; }

@@ -52,8 +52,8 @@ Si el equipo cambia de IP, edite `LEGAL_URL_PUBLICA`, reinicie LEGAL (ícono ›
 | Rol | Puede |
 |---|---|
 | **Administrador** | Todo lo anterior más: usuarios y roles, taxonomía (categorías, vías y etapas base), configuración de alertas y feriados, y la **base de datos**: explorar colecciones, editar o eliminar documentos JSON, descargar/restaurar respaldos, **vaciar datos operativos** o **vaciar todo** (confirmando con «VACIAR»). |
-| **Gerente** | Panel institucional con KPI, carga por profesional, cartera completa, alertas, **aprobar u observar plantillas**, reasignar procesos, solicitar plazos. |
-| **Profesional** | Sus procesos y **tablero de tareas** (arrastrar entre columnas, ficha con detalle, checklist, color y comentarios), **definir plazos** (uno a uno o en bloque), finalizar procesos; **sus plantillas** de tareas por vía (enviadas a aprobación). |
+| **Gerente** | Tablero de control institucional (semáforo de salud de la cartera, KPI de cartera, cronograma con SPI y gestión documental, desempeño desplegable por profesional con cada uno de sus procesos, alertas por prioridad y agenda de plazos; imprimible), cartera completa, alertas, **aprobar u observar plantillas**, reasignar procesos, solicitar plazos. |
+| **Profesional** | Su tablero de control (agenda de plazos, alertas por prioridad, procesos desplegables con su ciclo de tareas), sus procesos y **tablero de tareas** (arrastrar entre columnas o Mayús + ← →, ficha con detalle, checklist, color y comentarios), **definir plazos** (uno a uno o en bloque), finalizar procesos; **sus plantillas** de tareas por vía (enviadas a aprobación). |
 | **Asistente administrativo** | Indexar trámites desde el SGD con la extensión, registrar procesos, ver la cartera, **solicitar la definición de plazos**. |
 
 Los KPI y las reglas de alerta están en [`docs/13-kpi-y-alertas.md`](docs/13-kpi-y-alertas.md).
