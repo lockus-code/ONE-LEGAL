@@ -13,7 +13,7 @@ LEGAL es un único ejecutable (`LEGAL.exe`) que se instala en **un equipo de la 
 | `portal/` | Portal web (HTML/CSS/JS sin dependencias). |
 | `extension/` | Extensión Chrome (Manifest V3, panel lateral). |
 | `pruebas/sgd-simulado/` | SGD simulado con la estructura del SGD de SEDAPAR y datos ficticios. |
-| `docs/` | Reconocimiento del SGD (11), despliegue en Hetzner (12), KPI y alertas (13). |
+| `docs/` | Reconocimiento del SGD (11), despliegue en Hetzner (12), KPI y alertas (13), informe de análisis del sistema (14). |
 
 ---
 
