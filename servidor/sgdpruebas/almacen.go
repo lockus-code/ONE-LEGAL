@@ -1,6 +1,6 @@
-package main
+package sgdpruebas
 
-// Almacén compartido del SGD de pruebas (/sgd-simulado/api/...).
+// Almacén compartido de las páginas del SGD de pruebas (/sgd-simulado/api/...).
 //
 // Las reglas del SGD de pruebas viven en un solo lugar, el núcleo JavaScript
 // (pruebas/sgd-simulado/nucleo.js). El servidor solo guarda, para que varios
@@ -9,8 +9,8 @@ package main
 //     versión vieja se rechaza (409) y el navegador reintenta la acción sobre el
 //     estado nuevo (control de concurrencia optimista);
 //   - los archivos subidos a los trámites.
-// Usa una base aparte (datos/sgd-pruebas.db): nunca se mezcla con los datos de
-// LEGAL ni entra en sus respaldos. Todo lo que contiene es ficticio.
+// La base es propia (sgd-pruebas.db): en LEGAL nunca se mezcla con legal.db ni
+// entra en sus respaldos. Todo lo que contiene es ficticio.
 
 import (
 	"crypto/rand"
@@ -23,23 +23,21 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	bolt "go.etcd.io/bbolt"
 )
 
 const (
-	sgdMaxEstado  = 64 << 20 // el estado incluye los documentos redactados
-	sgdMaxArchivo = 20 << 20 // RN-14
+	maxEstado  = 64 << 20 // el estado incluye los documentos redactados
+	maxArchivo = 20 << 20 // RN-14
 )
 
 var (
-	sgdBucketEstado   = []byte("estado")
-	sgdBucketArchivos = []byte("archivos")
-	sgdBucketMeta     = []byte("meta")
-	sgdRutaArchivo    = regexp.MustCompile(`^archivos/([0-9a-f]{32})$`)
-	sgdTiposArchivo   = map[string]string{
+	bucketEstado   = []byte("estado")
+	bucketArchivos = []byte("archivos")
+	bucketMeta     = []byte("meta")
+	rutaArchivo    = regexp.MustCompile(`^archivos/([0-9a-f]{32})$`)
+	tiposArchivo   = map[string]string{
 		".txt":  "text/plain; charset=utf-8",
 		".pdf":  "application/pdf",
 		".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -49,47 +47,16 @@ var (
 	}
 )
 
-type almacenSGD struct {
-	once sync.Once
-	db   *bolt.DB
-	err  error
-	ruta string
-}
-
-type metaArchivoSGD struct {
+type metaArchivo struct {
 	Nombre string `json:"nombre"`
 	Tipo   string `json:"tipo"`
 	Bytes  int    `json:"bytes"`
 	Fecha  string `json:"fecha"`
 }
 
-func (a *almacenSGD) abrir() (*bolt.DB, error) {
-	a.once.Do(func() {
-		a.db, a.err = bolt.Open(a.ruta, 0o600, &bolt.Options{Timeout: 2 * time.Second})
-		if a.err != nil {
-			return
-		}
-		a.err = a.db.Update(func(tx *bolt.Tx) error {
-			for _, b := range [][]byte{sgdBucketEstado, sgdBucketArchivos, sgdBucketMeta} {
-				if _, err := tx.CreateBucketIfNotExists(b); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	})
-	return a.db, a.err
-}
-
-func (a *almacenSGD) cerrar() {
-	if a.db != nil {
-		a.db.Close()
-	}
-}
-
-// manejarAPISGD atiende /sgd-simulado/api/{estado|archivos|archivos/{id}|reiniciar}.
-func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta string) {
-	db, err := s.sgd.abrir()
+// manejarAlmacen atiende /sgd-simulado/api/{estado|archivos|archivos/{id}|reiniciar}.
+func (s *SGD) manejarAlmacen(w http.ResponseWriter, r *http.Request, ruta string) {
+	db, err := s.abrir()
 	if err != nil {
 		rechazar(w, http.StatusInternalServerError, "No se pudo abrir la base del SGD de pruebas.")
 		return
@@ -99,7 +66,7 @@ func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta st
 		var version int
 		var estado json.RawMessage
 		db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket(sgdBucketEstado)
+			b := tx.Bucket(bucketEstado)
 			version, _ = strconv.Atoi(string(b.Get([]byte("version"))))
 			if v := b.Get([]byte("actual")); v != nil {
 				estado = append(json.RawMessage(nil), v...)
@@ -116,14 +83,14 @@ func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta st
 			Version int             `json:"version"`
 			Estado  json.RawMessage `json:"estado"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, sgdMaxEstado)).Decode(&cuerpo); err != nil || len(cuerpo.Estado) == 0 || cuerpo.Estado[0] != '{' {
+		if err := json.NewDecoder(io.LimitReader(r.Body, maxEstado)).Decode(&cuerpo); err != nil || len(cuerpo.Estado) == 0 || cuerpo.Estado[0] != '{' {
 			rechazar(w, http.StatusBadRequest, "El estado no tiene el formato esperado.")
 			return
 		}
 		errConflicto := errors.New("conflicto")
 		nueva := 0
 		err := db.Update(func(tx *bolt.Tx) error {
-			b := tx.Bucket(sgdBucketEstado)
+			b := tx.Bucket(bucketEstado)
 			actual, _ := strconv.Atoi(string(b.Get([]byte("version"))))
 			if actual != cuerpo.Version {
 				nueva = actual
@@ -146,24 +113,22 @@ func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta st
 
 	case ruta == "archivos" && r.Method == http.MethodPost:
 		nombre := strings.TrimSpace(r.URL.Query().Get("nombre"))
-		if _, ok := sgdTiposArchivo[strings.ToLower(filepath.Ext(nombre))]; !ok || len(nombre) > 200 {
+		if _, ok := tiposArchivo[strings.ToLower(filepath.Ext(nombre))]; !ok || len(nombre) > 200 {
 			rechazar(w, http.StatusBadRequest, "Extensión no permitida (RN-14).")
 			return
 		}
-		datos, err := io.ReadAll(io.LimitReader(r.Body, sgdMaxArchivo+1))
-		if err != nil || len(datos) == 0 || len(datos) > sgdMaxArchivo {
+		datos, err := io.ReadAll(io.LimitReader(r.Body, maxArchivo+1))
+		if err != nil || len(datos) == 0 || len(datos) > maxArchivo {
 			rechazar(w, http.StatusRequestEntityTooLarge, "El archivo debe pesar entre 1 byte y 20 MB (RN-14).")
 			return
 		}
-		aleatorio := make([]byte, 16)
-		rand.Read(aleatorio)
-		id := hex.EncodeToString(aleatorio)
-		meta, _ := json.Marshal(metaArchivoSGD{Nombre: nombre, Tipo: sgdTiposArchivo[strings.ToLower(filepath.Ext(nombre))], Bytes: len(datos), Fecha: ahora()})
+		id := nuevoID()
+		meta, _ := json.Marshal(metaArchivo{Nombre: nombre, Tipo: tiposArchivo[strings.ToLower(filepath.Ext(nombre))], Bytes: len(datos), Fecha: ahora()})
 		err = db.Update(func(tx *bolt.Tx) error {
-			if err := tx.Bucket(sgdBucketArchivos).Put([]byte(id), datos); err != nil {
+			if err := tx.Bucket(bucketArchivos).Put([]byte(id), datos); err != nil {
 				return err
 			}
-			return tx.Bucket(sgdBucketMeta).Put([]byte(id), meta)
+			return tx.Bucket(bucketMeta).Put([]byte(id), meta)
 		})
 		if err != nil {
 			rechazar(w, http.StatusInternalServerError, "No se pudo guardar el archivo.")
@@ -171,14 +136,14 @@ func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta st
 		}
 		responder(w, http.StatusCreated, map[string]any{"id": id, "bytes": len(datos)})
 
-	case sgdRutaArchivo.MatchString(ruta) && r.Method == http.MethodGet:
-		id := sgdRutaArchivo.FindStringSubmatch(ruta)[1]
+	case rutaArchivo.MatchString(ruta) && r.Method == http.MethodGet:
+		id := rutaArchivo.FindStringSubmatch(ruta)[1]
 		var datos []byte
-		var meta metaArchivoSGD
+		var meta metaArchivo
 		db.View(func(tx *bolt.Tx) error {
-			if v := tx.Bucket(sgdBucketArchivos).Get([]byte(id)); v != nil {
+			if v := tx.Bucket(bucketArchivos).Get([]byte(id)); v != nil {
 				datos = append([]byte(nil), v...)
-				json.Unmarshal(tx.Bucket(sgdBucketMeta).Get([]byte(id)), &meta)
+				json.Unmarshal(tx.Bucket(bucketMeta).Get([]byte(id)), &meta)
 			}
 			return nil
 		})
@@ -197,7 +162,7 @@ func (s *Servidor) manejarAPISGD(w http.ResponseWriter, r *http.Request, ruta st
 	case ruta == "reiniciar" && r.Method == http.MethodPost:
 		// Borra estado y archivos; el navegador vuelve a cargar los escenarios.
 		err := db.Update(func(tx *bolt.Tx) error {
-			for _, b := range [][]byte{sgdBucketEstado, sgdBucketArchivos, sgdBucketMeta} {
+			for _, b := range [][]byte{bucketEstado, bucketArchivos, bucketMeta} {
 				if err := tx.DeleteBucket(b); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
 					return err
 				}
@@ -229,4 +194,40 @@ func urlEscape(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func nuevoID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (s *SGD) leerArchivo(id string) ([]byte, bool) {
+	db, err := s.abrir()
+	if err != nil {
+		return nil, false
+	}
+	var datos []byte
+	db.View(func(tx *bolt.Tx) error {
+		if v := tx.Bucket(bucketArchivos).Get([]byte(id)); v != nil {
+			datos = append([]byte(nil), v...)
+		}
+		return nil
+	})
+	return datos, datos != nil
+}
+
+// borrarArchivos elimina los archivos subidos (al restablecer los escenarios desde la API).
+func (s *SGD) borrarArchivos() {
+	db, err := s.abrir()
+	if err != nil {
+		return
+	}
+	db.Update(func(tx *bolt.Tx) error {
+		for _, b := range [][]byte{bucketArchivos, bucketMeta} {
+			tx.DeleteBucket(b)
+			tx.CreateBucket(b)
+		}
+		return nil
+	})
 }

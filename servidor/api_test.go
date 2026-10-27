@@ -30,7 +30,7 @@ func entorno(t *testing.T) (*Servidor, *cliente) {
 	s := &Servidor{bd: bd, cfg: cfg, web: web, version: "prueba", iniciado: time.Now()}
 	t.Cleanup(func() {
 		if s.sgd != nil {
-			s.sgd.cerrar()
+			s.sgd.Cerrar()
 		}
 	})
 	if err := s.inicializar(); err != nil {

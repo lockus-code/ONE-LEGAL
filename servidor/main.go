@@ -125,7 +125,7 @@ func main() {
 		defer cancelar()
 		httpSrv.Shutdown(ctx)
 		if srv.sgd != nil {
-			srv.sgd.cerrar()
+			srv.sgd.Cerrar()
 		}
 		bd.Cerrar()
 		log.Print("LEGAL detenido")

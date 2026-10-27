@@ -5,7 +5,7 @@
 | **Versión** | 2.0.0 (`SGD.VERSION` en `pruebas/sgd-simulado/nucleo.js`) |
 | **Para qué sirve** | Entorno de pruebas **funcional y multiusuario** con la forma del SGD de SEDAPAR (docs/11): registrar, derivar entre áreas y usuarios, recibir, atender, observar, archivar, asociar trámites, subir y ver documentos. Sirve para probar LEGAL, la extensión «Conector SGD» y cualquier software futuro que lea o se integre con un SGD. |
 | **Datos** | Todos ficticios. No usar datos reales. |
-| **Dónde** | `http://<servidor>:8790/sgd-simulado/` (LEGAL.exe con `LEGAL_SGD_SIMULADO=si`) o `node pruebas/sgd-simulado/pruebas/servidor-local.js` |
+| **Dónde** | **`SGD-Pruebas.exe`** (ejecutable independiente, puerto 8791, §11) · dentro de LEGAL.exe con `LEGAL_SGD_SIMULADO=si` (puerto 8790) · `node pruebas/sgd-simulado/pruebas/servidor-local.js` (sin API v1) |
 
 Donde el SGD real no está determinado (docs/11 §7.3), aquí se elige un **supuesto** y se marca así. Si sistemas aclara la duda, se cambia la regla en `nucleo.js` y su prueba.
 
@@ -21,19 +21,24 @@ pruebas/sgd-simulado/
   rutas.json       Rutas (las usan servidor/api.go y pruebas/servidor-local.js).
   *.html           Páginas: login, dashboard, mistramites, listadotramites, nuevotramiteint, detalletramite, consola.
   pruebas/         nucleo.test.js (node --test) · navegador.e2e.js (Playwright) · servidor-local.js
-servidor/sgd_pruebas.go   Almacén compartido: /sgd-simulado/api/… (base aparte datos/sgd-pruebas.db)
+servidor/sgdpruebas/      Paquete Go: páginas embebidas, almacén (/api/) y API REST v1 (/api/v1/, núcleo ejecutado con goja)
+servidor/cmd/sgd-pruebas/ Ejecutable independiente SGD-Pruebas.exe
 ```
 
-**Una sola fuente de reglas.** Todas las reglas viven en `nucleo.js`. El servidor solo guarda:
+LEGAL y SGD-Pruebas usan el mismo paquete `sgdpruebas`: el SGD es idéntico en ambos.
+
+**Una sola fuente de reglas.** Todas las reglas viven en `nucleo.js`. El navegador lo ejecuta en las páginas y el servidor lo ejecuta con goja en la API v1 (§12). Para las páginas, el servidor solo guarda:
 
 - el **estado** completo (JSON) con número de **versión**. Cada acción del navegador lee el estado más reciente, aplica la regla y escribe con la versión que leyó; si otro usuario escribió antes, el servidor responde `409` y el navegador repite la acción sobre el estado nuevo (concurrencia optimista). Así varios usuarios en distintos equipos trabajan sobre los mismos trámites;
 - los **archivos** subidos (hasta 20 MB cada uno).
 
 Sin servidor (página abierta de otro modo), el estado queda en `localStorage` del navegador (modo «local», archivos hasta 2 MB). La barra lateral indica el modo.
 
-La base `datos/sgd-pruebas.db` **no se mezcla** con `legal.db`: no entra en los respaldos de LEGAL ni se borra con «vaciar». Se restablece desde la consola.
+En LEGAL, la base `datos/sgd-pruebas.db` **no se mezcla** con `legal.db`: no entra en los respaldos de LEGAL ni se borra con «vaciar». Se restablece desde la consola.
 
-### API del almacén (`/sgd-simulado/api/`)
+### API del almacén de las páginas (`/sgd-simulado/api/`)
+
+Es interna de las páginas. Para integrar otros sistemas use la API REST v1 (§12).
 
 Las escrituras exigen la cabecera `X-SGD-Pruebas: 1` (fuerza una consulta previa CORS: otra página no puede escribir aquí desde el navegador).
 
@@ -215,9 +220,9 @@ node --test pruebas/sgd-simulado/pruebas/*.test.js
 # Navegador real (Playwright): lector de la extensión contra los 19 escenarios,
 # flujo multiusuario con archivos y expiración de sesión
 node pruebas/sgd-simulado/pruebas/navegador.e2e.js
-SGD_URL=http://127.0.0.1:8790/sgd-simulado node pruebas/sgd-simulado/pruebas/navegador.e2e.js   # contra LEGAL.exe
+SGD_URL=http://127.0.0.1:8791/sgd-simulado node pruebas/sgd-simulado/pruebas/navegador.e2e.js   # contra SGD-Pruebas.exe (8790: LEGAL)
 
-# API del almacén en Go
+# Almacén, API v1 y rutas en Go (antes: servidor/construir.sh copia las páginas a sgdpruebas/web)
 cd servidor && go test ./...
 ```
 
@@ -230,3 +235,77 @@ Criterio de aceptación para un lector (docs/11 §9): todos los escenarios con s
 - **Adaptador del SGD real:** `SGD.CONTRATO_REST` relaciona cada endpoint observado en el SGD real con la función equivalente del núcleo, para cuando sistemas publique una API documentada.
 
 > El SGD de pruebas no protege nada real: la autenticación es del lado del navegador y la contraseña es común. No lo publique en Internet sin la protección de acceso de docs/12, y no cargue datos reales.
+
+---
+
+## 11. Ejecutable independiente: `SGD-Pruebas.exe`
+
+Un solo archivo, sin instalar nada (ni LEGAL, ni Node, ni base de datos). Sirve para probar **cualquier** software contra un SGD: lectores del DOM, extensiones, robots, integraciones por API.
+
+1. Copie `descargas/SGD-Pruebas.exe` a una carpeta fija (p. ej. `C:\SGD-Pruebas\`) y haga doble clic.
+2. En el primer inicio crea, junto al ejecutable:
+   - `sgd-pruebas.env` (interfaz, puerto, carpeta de datos, abrir navegador);
+   - `sgd-datos\sgd-pruebas.db` con los 19 escenarios, y `sgd-datos\registro.log`.
+3. Abre en el navegador la página de inicio (`http://localhost:8791/`), con las direcciones para otros equipos, la tabla de la API y ejemplos con `curl`.
+4. Un ícono junto al reloj ofrece: abrir el SGD, consola de pruebas, direcciones y API, carpeta de datos, editar la configuración y detener.
+
+Windows preguntará si permite el acceso a la red: acepte **Redes privadas** para que otros equipos lleguen.
+
+```ini
+# sgd-pruebas.env
+SGD_HOST=0.0.0.0          # 127.0.0.1 = solo este equipo
+SGD_PUERTO=8791           # LEGAL usa 8790: ambos pueden correr a la vez
+SGD_DATOS=sgd-datos
+SGD_ABRIR_NAVEGADOR=si
+```
+
+Opciones de línea de comandos (también en Linux con `sgd-pruebas-linux`): `-puerto`, `-host`, `-datos`, `-config`, `-no-abrir`, `-sin-bandeja` (modo servicio: sin ícono, se detiene con Ctrl+C o SIGTERM). Las variables de entorno con los mismos nombres del `.env` tienen prioridad.
+
+Para volver a empezar: «Restablecer escenarios» en la consola, `POST /sgd-simulado/api/v1/reiniciar`, o detener el programa y borrar `sgd-datos`.
+
+**Con la extensión Conector SGD:** en sus opciones, agregue `http://<equipo>:8791/sgd-simulado/` como SGD habilitado.
+
+## 12. API REST v1 (para otros sistemas)
+
+Base: `http://<equipo>:8791/sgd-simulado/api/v1` (o `:8790` en LEGAL). JSON en UTF-8, autenticación **HTTP Basic** con un usuario de prueba y la clave `prueba`, CORS abierto (`*`) para clientes web.
+
+Cada petición ejecuta el **mismo núcleo** que las páginas sobre los mismos datos, dentro de una transacción: lo que un sistema hace por la API se ve en la interfaz y viceversa, con las mismas reglas y la misma bitácora.
+
+| Método y ruta | Cuerpo / parámetros | Respuesta |
+|---|---|---|
+| `GET /` | — (sin autenticación) | Versión, reglas, acciones, perfiles, contrato con el SGD real |
+| `GET /catalogos` | — (sin autenticación) | Áreas, tipos, estados, usuarios, límites |
+| `GET /escenarios` | — (sin autenticación) | Escenarios con su `esperado` |
+| `GET /sesion` | — | Usuario autenticado (área, perfil) |
+| `GET /bandeja` | `numero, asunto, estado, asignadosAMi=1, incluirCerrados=1, pagina` | `{total, pagina, paginas, porPagina, filas[]}` |
+| `GET /tramites` | `numero, asunto, estado, tipo, area, desde, hasta (AAAA-MM-DD), pagina` (al menos uno, RN-20) | Igual que la bandeja |
+| `GET /tramites/{id}` | — | Trámite: datos, `movimientos`, `movimientosDesc`, `adjuntos`, `acciones` posibles para el usuario, `semaforo` |
+| `GET /tramites/numero/{n}` | n.º en cualquier forma (`2026-00871-12`) | Igual que el anterior |
+| `GET /tramites/{id}/adjuntos/{n}` | `?contenido=1` devuelve el archivo | Metadatos o contenido del documento |
+| `POST /tramites` | `{tipo, asunto, contenido?, origen?, expediente?, asociarA?, confidencial?, solicitante?, documento?, derivar?}` | `201` con el trámite. Todo o nada |
+| `POST /tramites/{id}/derivar` | `{areaDestino, usuarioDestino?, plazoDias?, proveido}` | Trámite actualizado |
+| `POST /tramites/{id}/recibir` · `/iniciar` | — | Trámite actualizado |
+| `POST /tramites/{id}/observar` · `/archivar` · `/desarchivar` · `/anular` | `{motivo}` | Trámite actualizado |
+| `POST /tramites/{id}/atender` | `{motivo?}` | Trámite actualizado |
+| `POST /tramites/{id}/adjuntar` | `{nombre, texto}` (documento .txt) o `{nombre, contenidoBase64}` (archivo), `descripcion?`, `publico?` | Trámite actualizado |
+| `POST /tramites/{id}/asociar` | `{numero}` | Trámite actualizado |
+| `POST /tramites/{id}/confidencial` | `{valor: true/false}` | Trámite actualizado |
+| `GET /resumen` · `GET /bitacora` | — | Indicadores del área · últimas 500 acciones |
+| `POST /opciones` | `{marcarLeidoAlAbrir?, ttlMinutos?, factorLatencia?}` | Opciones vigentes |
+| `POST /reiniciar` | — | Vuelve a los escenarios y borra los archivos subidos |
+
+`documento` y `derivar` en `POST /tramites` tienen la misma forma que `adjuntar` y `derivar`.
+
+**Errores:** `{"codigo": "RN-xx", "mensaje": "…"}` con `401` (RN-01, credenciales), `403` (RN-02, RN-03, RN-16), `404` (RN-00) o `422` (las demás reglas). Ruta o JSON inválidos: `404` / `400` con `{"mensaje"}`.
+
+```bash
+curl -u logistica:prueba -H "Content-Type: application/json" http://localhost:8791/sgd-simulado/api/v1/tramites -d '{
+  "tipo": "INFORME", "asunto": "SOLICITA OPINIÓN LEGAL (PRUEBA)",
+  "documento": { "nombre": "informe.txt", "texto": "Texto del informe" },
+  "derivar": { "areaDestino": "GERENCIA DE ASESORÍA JURÍDICA", "usuarioDestino": "abogado.uno", "plazoDias": 5, "proveido": "Para opinión" }
+}'
+curl -u abogado.uno:prueba "http://localhost:8791/sgd-simulado/api/v1/bandeja?asignadosAMi=1"
+curl -u abogado.uno:prueba -X POST http://localhost:8791/sgd-simulado/api/v1/tramites/250101/recibir
+```
+
+> La API usa una clave conocida y CORS abierto a propósito: es para pruebas. Publíquela solo en redes de prueba.

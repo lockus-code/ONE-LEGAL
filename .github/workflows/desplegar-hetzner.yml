@@ -52,6 +52,8 @@ jobs:
           path: |
             servidor/dist/legal-linux
             servidor/dist/LEGAL.exe
+            servidor/dist/SGD-Pruebas.exe
+            servidor/dist/sgd-pruebas-linux
             despliegue/Caddyfile
           retention-days: 14
 

@@ -8,8 +8,8 @@ LEGAL es un único ejecutable (`LEGAL.exe`) que se instala en **un equipo de la 
 
 | Carpeta | Contenido |
 |---|---|
-| `descargas/` | `LEGAL.exe` listo para descargar (Windows 64 bits). |
-| `servidor/` | Código Go del servidor, la API, la base de datos y el ejecutable. |
+| `descargas/` | `LEGAL.exe` y `SGD-Pruebas.exe` listos para descargar (Windows 64 bits). |
+| `servidor/` | Código Go del servidor, la API, la base de datos y los ejecutables (`cmd/sgd-pruebas`: SGD de pruebas independiente). |
 | `portal/` | Portal web (HTML/CSS/JS sin dependencias). |
 | `extension/` | Extensión Chrome (Manifest V3, panel lateral). |
 | `pruebas/sgd-simulado/` | SGD de pruebas funcional (reglas, usuarios, documentos) con la estructura del SGD de SEDAPAR y datos ficticios. |
@@ -102,6 +102,8 @@ Con `LEGAL_SGD_SIMULADO=si`, `http://<servidor>:8790/sgd-simulado/` publica un *
 - 19 escenarios con casos límite para lectores del DOM y una **consola de pruebas** en `/sgd-simulado/consola` (restablecer datos, expiración de sesión, latencia, reglas).
 
 El estado y los archivos se guardan en `datos/sgd-pruebas.db`, aparte de la base de LEGAL, y los comparten todos los usuarios de la red. La extensión descargada ya incluye el SGD de pruebas entre los SGD habilitados. Sin compilar el servidor: `node pruebas/sgd-simulado/pruebas/servidor-local.js`.
+
+**Para probar otros sistemas sin LEGAL**, use **`descargas/SGD-Pruebas.exe`**: el mismo SGD de pruebas en un ejecutable independiente (doble clic; puerto 8791; datos en `sgd-datos\` junto al ejecutable; ícono en la bandeja). Además de las páginas, ofrece una **API REST v1** (`/sgd-simulado/api/v1`, JSON, autenticación Basic con los usuarios de prueba) que aplica las mismas reglas, para integraciones y pruebas automáticas. Ver [docs/14 §11–12](docs/14-sgd-de-pruebas.md#11-ejecutable-independiente-sgd-pruebasexe).
 
 Recorrido sugerido con la BD vacía: `admin` crea un profesional, un asistente y un gerente → el profesional crea su plantilla (p. ej. Contencioso administrativo › Proceso ordinario) → el gerente la aprueba → el asistente indexa el trámite 2026-00871-12 como proceso nuevo y anexa el 2026-01234-3 → el profesional mueve la primera tarea en *Mis tareas* hasta *Finalizada* y define en *Plazos por definir* el plazo que quedó pendiente → el gerente revisa el panel institucional.
 
