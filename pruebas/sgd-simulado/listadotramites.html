@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    // Seguimiento de Trámites: como en el SGD real, no lista nada hasta pulsar «Buscar» (RN-20).
+    SGD_INICIAR().then(function () {
+      var sesion = SGD_SESION.exigir();
+      if (!sesion) return;
+      var c = SGD_LAYOUT(sesion, 'app-listadotramites');
+      var p = SGD_PARAMETROS();
+      var buscado = Object.keys(p).some(function (k) { return k !== 'pagina' && p[k]; });
+      var filtros = '<form class="filtros" method="get">' +
+        '<label>N.º de trámite<input name="numero" value="' + esc(p.numero || '') + '" placeholder="2026 - 00000 - 0"></label>' +
+        '<label>Asunto<input name="asunto" value="' + esc(p.asunto || '') + '"></label>' +
+        '<label>Estado<select name="estado">' + SGD_OPCIONES(SGD.ESTADOS, p.estado, 'Todos') + '</select></label>' +
+        '<label>Tipo<select name="tipo">' + SGD_OPCIONES(SGD.CATALOGOS.tipos, p.tipo, 'Todos') + '</select></label>' +
+        '<label>Área<select name="area">' + SGD_OPCIONES(SGD.CATALOGOS.areas, p.area, 'Todas') + '</select></label>' +
+        '<label>Desde<input type="date" name="desde" value="' + esc(p.desde || '') + '"></label>' +
+        '<label>Hasta<input type="date" name="hasta" value="' + esc(p.hasta || '') + '"></label>' +
+        '<button class="btn" type="submit">Buscar</button></form>';
+      var cabecera = '<table class="table table-xs table-hover"><thead><tr><th>Tramite</th><th>Remitente</th><th>Asunto</th><th>Detalle</th><th>Tipo Tramite</th><th>Area</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>';
+      if (!buscado) {
+        c.innerHTML = SGD_CARD('SEGUIMIENTO DE TRÁMITES', filtros + cabecera + '</tbody></table>');
+        return;
+      }
+      c.innerHTML = '<div class="cargando">Buscando…</div>';
+      SGD_DEMORA(600, function () {
+        var r;
+        try { r = SGD_APP.buscar(sesion.usuario, p, p.pagina); } catch (x) { c.innerHTML = SGD_CARD('SEGUIMIENTO DE TRÁMITES', SGD_MENSAJE(x) + filtros); return; }
+        var paginas = '';
+        for (var i = 1; i <= r.paginas; i++) paginas += i === r.pagina ? '<b>' + i + '</b> ' : '<a href="?' + new URLSearchParams(Object.assign({}, p, { pagina: i })) + '">' + i + '</a> ';
+        c.innerHTML = SGD_CARD('SEGUIMIENTO DE TRÁMITES', filtros + cabecera +
+          (r.filas.length ? r.filas.map(function (t) {
+            return '<tr><td>' + esc(t.numeroVisible) + '</td><td>' + esc(t.remitente) + '</td><td>' + esc(t.asunto) + '</td><td>' + esc(t.tipo) + ' · ' + t.movimientos.length + ' mov.</td><td>' + esc(t.origen) + '</td><td>' + esc(t.areaActual) + '</td><td><span class="badge">' + esc(t.estado) + '</span></td><td>' + esc(t.fechaIngreso) + '</td>' +
+              '<td><a href="' + SGD_BASE + '/tramites/detalletramite/' + t.id + '" target="_self" title="Ingresar al Tramite">Ingresar</a></td></tr>';
+          }).join('') : '<tr><td colspan="9">Sin resultados.</td></tr>') +
+          '</tbody></table><div class="paginador">' + r.total + ' resultado(s) · Página ' + paginas + '</div>');
+      });
+    });
+  </script>
+</body>
+</html>

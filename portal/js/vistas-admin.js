@@ -338,7 +338,7 @@
             <li>Elija la acción en el desplegable: <strong>Crear un proceso nuevo</strong> (profesional → vía, o categoría → vía → profesional) o <strong>Anexar a un proceso existente</strong>. Pulse <strong>Indexar en LEGAL</strong>.</li>
           </ol>
           <p class="secundario">Lo indexado se guarda en la base de datos del servidor y aparece en el portal en segundos (Trámites SGD y en el proceso). Si cambia la dirección del servidor, vuelva a descargar la extensión o cámbiela en su Configuración.</p>
-          ${s.sgdSimulado ? `<div class="aviso aviso--info"><span>Para practicar sin el SGD real use el <a href="/sgd-simulado/" target="_blank" rel="noopener">SGD simulado</a> (acepta cualquier usuario y contraseña).</span></div>` : ''}
+          ${s.sgdSimulado ? `<div class="aviso aviso--info"><span>Para practicar sin el SGD real use el <a href="/sgd-simulado/" target="_blank" rel="noopener">SGD simulado</a> (usuarios de prueba con la contraseña «prueba»).</span></div>` : ''}
         </section>`;
     }
   };

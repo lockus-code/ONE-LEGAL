@@ -7,7 +7,7 @@ VERSION="${VERSION:-1.2.0}"
 
 rm -rf web && mkdir -p web dist
 cp -r ../portal web/portal
-cp -r ../pruebas/sgd-simulado web/sgd-simulado
+cp -r ../pruebas/sgd-simulado web/sgd-simulado && rm -rf web/sgd-simulado/pruebas
 cp -r ../extension web/extension
 cp -r centro web/centro
 

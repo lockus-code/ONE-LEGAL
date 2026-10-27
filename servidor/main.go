@@ -124,6 +124,9 @@ func main() {
 		ctx, cancelar := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancelar()
 		httpSrv.Shutdown(ctx)
+		if srv.sgd != nil {
+			srv.sgd.cerrar()
+		}
 		bd.Cerrar()
 		log.Print("LEGAL detenido")
 	}

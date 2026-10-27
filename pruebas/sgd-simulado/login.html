@@ -1,26 +1,50 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
 <body>
   <app-root ng-version="12.2.16">
-    <form class="login" id="ingreso">
-      <h3>Sistema de Gestión Documental · Simulado</h3>
-      <div class="aviso">Entorno de pruebas con datos ficticios. Ingrese cualquier usuario y contraseña.</div>
-      <label for="usuario">Usuario</label><input id="usuario" value="usuario.prueba">
-      <label for="clave">Contraseña</label><input id="clave" type="password">
-      <button class="btn" type="submit">Ingresar</button>
-      <p id="error" style="color:#b00"></p>
-    </form>
+    <div class="login-pagina">
+      <form class="login" id="ingreso">
+        <h3>Sistema de Gestión Documental · Pruebas</h3>
+        <div class="aviso">Entorno de pruebas con datos ficticios. Todos los usuarios usan la contraseña <b>prueba</b>.</div>
+        <label for="usuario">Usuario</label><input id="usuario" value="usuario.prueba" autocomplete="username">
+        <label for="clave">Contraseña</label><input id="clave" type="password" autocomplete="current-password">
+        <button class="btn" type="submit">Ingresar</button>
+        <p id="error" class="texto-error" role="alert"></p>
+        <p class="pie"><a href="/sgd-simulado/consola">Consola de pruebas</a></p>
+      </form>
+      <div class="login usuarios-prueba">
+        <h3>Usuarios de prueba</h3>
+        <table class="table table-xs"><thead><tr><th>Usuario</th><th>Área</th><th>Perfil</th></tr></thead><tbody id="usuarios"></tbody></table>
+      </div>
+    </div>
   </app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
   <script src="/sgd-simulado/datos.js"></script>
   <script>
-    if (SGD_SESION.obtener()) location.replace(SGD_BASE + '/tramites/mistramites');
+    SGD_INICIAR().then(function () {
+      if (SGD_SESION.obtener()) return location.replace(SGD_BASE + '/tramites/mistramites');
+      document.getElementById('usuarios').innerHTML = SGD_APP.usuarios().map(function (u) {
+        return '<tr><td><a href="#" data-u="' + esc(u.usuario) + '">' + esc(u.usuario) + '</a>' + (u.activo ? '' : ' <small>(inactivo)</small>') + '</td><td>' + esc(u.area) + '</td><td>' + esc(u.perfil) + '</td></tr>';
+      }).join('');
+      document.getElementById('usuarios').addEventListener('click', function (e) {
+        var a = e.target.closest('a[data-u]');
+        if (!a) return;
+        e.preventDefault();
+        document.getElementById('usuario').value = a.dataset.u;
+        document.getElementById('clave').value = SGD.CLAVE_PRUEBA;
+        document.getElementById('clave').focus();
+      });
+    });
     document.getElementById('ingreso').addEventListener('submit', function (e) {
       e.preventDefault();
       var u = document.getElementById('usuario').value.trim(), c = document.getElementById('clave').value;
-      if (!u || !c) { document.getElementById('error').textContent = 'Ingrese usuario y contraseña.'; return; }
-      SGD_SESION.iniciar(u);
-      location.href = SGD_BASE + '/tramites/mistramites';
+      var error = document.getElementById('error');
+      if (!u || !c) { error.textContent = 'Ingrese usuario y contraseña.'; return; }
+      SGD_SESION.iniciar(u, c).then(function () {
+        location.href = SGD_BASE + '/tramites/mistramites';
+      }, function (x) { error.textContent = x.message; });
     });
   </script>
 </body>

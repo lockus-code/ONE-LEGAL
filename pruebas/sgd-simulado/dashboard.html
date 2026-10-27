@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    SGD_INICIAR().then(function () {
+      var sesion = SGD_SESION.exigir();
+      if (!sesion) return;
+      var c = SGD_LAYOUT(sesion, 'app-dashboard');
+      var r = SGD_APP.resumen(sesion.usuario);
+      var tarjeta = function (titulo, valor, enlace) { return '<a class="indicador" href="' + SGD_BASE + enlace + '"><span>' + titulo + '</span><b>' + valor + '</b></a>'; };
+      c.innerHTML = SGD_CARD('INICIO · ' + esc(r.area),
+        '<div class="indicadores">' +
+          tarjeta('En mi área', r.total, '/tramites/mistramites') +
+          tarjeta('Por recibir', r.porRecibir, '/tramites/mistramites?estado=DERIVADO') +
+          tarjeta('En proceso', r.porEstado['EN PROCESO'], '/tramites/mistramites?estado=EN%20PROCESO') +
+          tarjeta('Plazo vencido', r.porSemaforo.ROJO, '/tramites/mistramites') +
+          tarjeta('Vence pronto', r.porSemaforo.AMBAR, '/tramites/mistramites') +
+        '</div>' +
+        '<table class="table"><thead><tr><th>Estado</th><th>Trámites</th></tr></thead><tbody>' +
+        SGD.ESTADOS.map(function (e) { return '<tr><td>' + e + '</td><td>' + r.porEstado[e] + '</td></tr>'; }).join('') + '</tbody></table>');
+    });
+  </script>
+</body>
+</html>

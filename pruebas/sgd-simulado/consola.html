@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado · Consola de pruebas</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <!-- La consola no imita al SGD real: es la herramienta del banco de pruebas. No requiere sesión. -->
+  <main class="consola">
+    <h2>SGD de pruebas · Consola</h2>
+    <p class="text-muted">Versión del núcleo <b id="version"></b> · Datos: <b id="modo"></b> · <a href="/sgd-simulado/pages/login">Ir al SGD</a> · Especificación: <code>docs/14-sgd-de-pruebas.md</code></p>
+    <div id="mensaje"></div>
+
+    <section class="card"><div class="header"><legend class="title">Banco de pruebas</legend></div><div class="content">
+      <form id="opciones" class="filtros">
+        <label class="check"><input type="checkbox" name="marcarLeidoAlAbrir"> Abrir el detalle registra «Fecha leído» (hipótesis R9)</label>
+        <label>Sesión expira tras (min de inactividad, 0 = nunca)<input type="number" name="ttlMinutos" min="0" max="480" step="any"></label>
+        <label>Factor de latencia (1 = como el SGD real)<input type="number" name="factorLatencia" min="0" max="10" step="0.1"></label>
+        <button class="btn" type="submit">Guardar opciones</button>
+      </form>
+      <div class="botones">
+        <button class="btn" type="button" id="reiniciar">Restablecer escenarios (borra cambios y archivos)</button>
+        <button class="btn btn-secundario" type="button" id="exportar">Exportar datos (JSON)</button>
+        <label class="btn btn-secundario">Importar datos<input type="file" id="importar" accept=".json" hidden></label>
+      </div>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Escenarios (resultado esperado de un lector del DOM, con usuario.prueba)</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>ID</th><th>Número</th><th>Caso</th><th>Etiquetas</th><th>Esperado</th><th></th></tr></thead><tbody id="escenarios"></tbody></table>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Usuarios de prueba (contraseña común: <code id="clave"></code>)</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>Usuario</th><th>Nombre</th><th>Área</th><th>Perfil</th><th>Puede</th></tr></thead><tbody id="usuarios"></tbody></table>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Reglas de negocio</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>Código</th><th>Regla</th><th>Descripción</th></tr></thead><tbody id="reglas"></tbody></table>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Máquina de estados</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>Acción</th><th>Desde</th><th>Hacia</th><th>Perfiles</th></tr></thead><tbody id="estados"></tbody></table>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Bitácora (últimas 100 acciones, RN-21)</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>ID</th><th>Resultado</th><th>Detalle</th></tr></thead><tbody id="bitacora"></tbody></table>
+    </div></section>
+
+    <section class="card"><div class="header"><legend class="title">Contrato con los endpoints del SGD real (docs/11 §5)</legend></div><div class="content">
+      <table class="table table-xs"><thead><tr><th>Ruta del SGD real</th><th>Función del núcleo</th><th>Descripción</th></tr></thead><tbody id="contrato"></tbody></table>
+    </div></section>
+  </main>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    var aviso = document.getElementById('mensaje');
+    var avisar = function (x) { aviso.innerHTML = SGD_MENSAJE(x); window.scrollTo(0, 0); };
+    var filas = function (id, lista, fn) { document.getElementById(id).innerHTML = lista.map(function (x) { return '<tr>' + fn(x).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join(''); };
+
+    function pintar() {
+      var e = SGD_APP;
+      document.getElementById('version').textContent = SGD.VERSION;
+      document.getElementById('modo').textContent = SGD_MODO() === 'servidor' ? 'compartidos en el servidor (todos los usuarios ven lo mismo)' : 'solo en este navegador (sin servidor)';
+      document.getElementById('clave').textContent = SGD.CLAVE_PRUEBA;
+      var o = e.opciones(), f = document.getElementById('opciones');
+      f.marcarLeidoAlAbrir.checked = Boolean(o.marcarLeidoAlAbrir);
+      f.ttlMinutos.value = o.ttlMinutos || 0;
+      f.factorLatencia.value = o.factorLatencia == null ? 1 : o.factorLatencia;
+      filas('escenarios', SGD_ESCENARIOS, function (s) {
+        var esp = s.esperado;
+        return [s.id, esc(s.numero), esc(s.descripcion), s.etiquetas.map(function (x) { return '<span class="etiqueta">' + esc(x) + '</span>'; }).join(' '),
+          '<code>' + esc(esp.numero || esp.motivo) + '</code>' + (esp.confidencial ? ' · confidencial' : '') + (esp.estrategias ? ' · ' + Object.keys(esp.estrategias).filter(function (k) { return esp.estrategias[k]; }).join('+') : ''),
+          '<a href="' + SGD_BASE + '/tramites/detalletramite/' + s.id + '">Abrir</a>'];
+      });
+      filas('usuarios', e.usuarios(), function (u) { return [esc(u.usuario) + (u.activo ? '' : ' (inactivo)'), esc(u.nombre), esc(u.area), esc(u.perfil), esc(SGD.PERFILES[u.perfil].acciones.join(', ') || 'solo lectura')]; });
+      filas('reglas', SGD.REGLAS, function (r) { return ['<b>' + r.codigo + '</b>', esc(r.titulo), esc(r.descripcion)]; });
+      filas('estados', Object.keys(SGD.ACCIONES), function (a) {
+        return [esc(SGD.ACCIONES[a].etiqueta), esc(SGD.ACCIONES[a].desde.join(', ')), esc(SGD.ACCIONES[a].hacia), esc(Object.keys(SGD.PERFILES).filter(function (p) { return SGD.PERFILES[p].acciones.indexOf(a) >= 0; }).join(', '))];
+      });
+      filas('bitacora', e.bitacora().slice(0, 100), function (b) { return [esc(b.fecha), esc(b.usuario), esc(b.accion), b.id || '', b.resultado === 'OK' ? 'OK' : '<b class="texto-error">' + esc(b.resultado) + '</b>', esc(b.detalle)]; });
+      filas('contrato', SGD.CONTRATO_REST, function (x) { return ['<code>' + esc(x.ruta) + '</code>', '<code>' + esc(x.funcion) + '</code>', esc(x.descripcion)]; });
+    }
+
+    SGD_INICIAR().then(pintar);
+
+    document.getElementById('opciones').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = ev.target;
+      var o = { marcarLeidoAlAbrir: f.marcarLeidoAlAbrir.checked, ttlMinutos: Number(f.ttlMinutos.value) || 0, factorLatencia: Math.max(0, Number(f.factorLatencia.value)) };
+      SGD_ACCION(function (m) { m.configurar(o); }).then(function () { avisar('Opciones guardadas.'); pintar(); }, avisar);
+    });
+    document.getElementById('reiniciar').addEventListener('click', function () {
+      if (!confirm('¿Restablecer todos los trámites a los escenarios iniciales? Se pierden los cambios y archivos de todos los usuarios.')) return;
+      SGD_REINICIAR().then(function () { avisar('Escenarios restablecidos.'); pintar(); }, avisar);
+    });
+    document.getElementById('exportar').addEventListener('click', function () {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(SGD_APP.exportar(), null, 2)], { type: 'application/json' }));
+      a.download = 'sgd-pruebas-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+    });
+    document.getElementById('importar').addEventListener('change', function (ev) {
+      var archivo = ev.target.files[0];
+      if (!archivo) return;
+      archivo.text().then(function (t) {
+        var datos = JSON.parse(t);
+        return SGD_ACCION(function (m) { m.importar(datos); });
+      }).then(function () { avisar('Datos importados.'); pintar(); }, avisar);
+    });
+  </script>
+</body>
+</html>

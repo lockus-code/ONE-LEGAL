@@ -12,8 +12,8 @@ LEGAL es un único ejecutable (`LEGAL.exe`) que se instala en **un equipo de la 
 | `servidor/` | Código Go del servidor, la API, la base de datos y el ejecutable. |
 | `portal/` | Portal web (HTML/CSS/JS sin dependencias). |
 | `extension/` | Extensión Chrome (Manifest V3, panel lateral). |
-| `pruebas/sgd-simulado/` | SGD simulado con la estructura del SGD de SEDAPAR y datos ficticios. |
-| `docs/` | Reconocimiento del SGD (11), despliegue en Hetzner (12), KPI y alertas (13). |
+| `pruebas/sgd-simulado/` | SGD de pruebas funcional (reglas, usuarios, documentos) con la estructura del SGD de SEDAPAR y datos ficticios. |
+| `docs/` | Reconocimiento del SGD (11), despliegue en Hetzner (12), KPI y alertas (13), SGD de pruebas (14). |
 
 ---
 
@@ -93,7 +93,15 @@ La pestaña **Mis indexaciones** lista lo registrado, con un desplegable de acci
 
 ## 5. Pruebas con el SGD simulado
 
-Con `LEGAL_SGD_SIMULADO=si`, `http://<servidor>:8790/sgd-simulado/` reproduce las rutas del SGD de SEDAPAR con 5 trámites ficticios (acepta cualquier usuario). La extensión descargada ya lo incluye entre los SGD habilitados.
+Con `LEGAL_SGD_SIMULADO=si`, `http://<servidor>:8790/sgd-simulado/` publica un **SGD de pruebas funcional y multiusuario** con la estructura del SGD de SEDAPAR y datos ficticios (especificación completa en [docs/14](docs/14-sgd-de-pruebas.md)):
+
+- **usuarios de prueba** por área y perfil (Mesa de Partes, operador, jefe, consulta), todos con la contraseña `prueba`;
+- registrar trámites internos y externos, **derivar** a un área o a un usuario, recibir, atender, observar, archivar, anular, asociar trámites y agregar documentos a un expediente;
+- **documentos**: subir archivos (txt, pdf, docx, xlsx, jpg, png), redactar documentos de texto y verlos en el visor del trámite;
+- bandeja, seguimiento, plazos en días hábiles con semáforo y bitácora;
+- 19 escenarios con casos límite para lectores del DOM y una **consola de pruebas** en `/sgd-simulado/consola` (restablecer datos, expiración de sesión, latencia, reglas).
+
+El estado y los archivos se guardan en `datos/sgd-pruebas.db`, aparte de la base de LEGAL, y los comparten todos los usuarios de la red. La extensión descargada ya incluye el SGD de pruebas entre los SGD habilitados. Sin compilar el servidor: `node pruebas/sgd-simulado/pruebas/servidor-local.js`.
 
 Recorrido sugerido con la BD vacía: `admin` crea un profesional, un asistente y un gerente → el profesional crea su plantilla (p. ej. Contencioso administrativo › Proceso ordinario) → el gerente la aprueba → el asistente indexa el trámite 2026-00871-12 como proceso nuevo y anexa el 2026-01234-3 → el profesional mueve la primera tarea en *Mis tareas* hasta *Finalizada* y define en *Plazos por definir* el plazo que quedó pendiente → el gerente revisa el panel institucional.
 

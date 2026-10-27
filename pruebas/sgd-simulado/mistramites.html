@@ -1,24 +1,53 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
 <body>
   <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
   <script src="/sgd-simulado/datos.js"></script>
   <script>
-    var sesion = SGD_SESION.exigir();
-    if (sesion) {
+    SGD_INICIAR().then(function () {
+      var sesion = SGD_SESION.exigir();
+      if (!sesion) return;
       var c = SGD_LAYOUT(sesion, 'app-mistramites');
-      c.innerHTML = '<div class="cargando">Cargando…</div>';
-      setTimeout(function () { // imita la llamada getTramites (~1 s)
-        c.innerHTML = '<div class="card"><div class="header"><legend class="title">MIS TRÁMITES</legend></div><div class="content">' +
-          '<div class="aviso">SGD simulado: datos ficticios.</div>' +
-          '<table class="table table-xs table-hover scroll-table"><thead><tr><th></th><th>Expediente</th><th>Fecha de Solicitud</th><th>Remitente</th><th>Derivado a</th><th>Asunto</th><th>Estado</th><th>Adjuntos</th><th>Acciones</th></tr></thead><tbody>' +
-          SGD_TRAMITES.map(function (t, i) {
-            return '<tr><td>' + (i + 1) + '</td><td><p class="scroll-table-td-p">' + t.numero + '</p></td><td>' + t.fecha + '</td><td>' + t.remitente + '</td><td>' + t.derivado +
-              '</td><td>' + t.asunto + '</td><td><span class="badge">' + t.estado + '</span></td><td>—</td><td><a href="' + SGD_BASE + '/tramites/detalletramite/' + t.id + '" target="_self" title="Ingresar al Tramite">Ingresar</a></td></tr>';
-          }).join('') + '</tbody></table></div></div>';
-      }, 1000);
-    }
+      var p = SGD_PARAMETROS();
+      var mensaje = '';
+      function pintar() {
+        c.innerHTML = '<div class="cargando">Cargando…</div>';
+        SGD_DEMORA(1000, function () { // imita la llamada getTramites (~1 s)
+          var r = SGD_APP.bandeja(sesion.usuario, { numero: p.numero, asunto: p.asunto, estado: p.estado, incluirCerrados: p.cerrados === '1', asignadosAMi: p.mios === '1' }, p.pagina);
+          var paginas = '';
+          for (var i = 1; i <= r.paginas; i++) paginas += i === r.pagina ? '<b>' + i + '</b> ' : '<a href="?' + new URLSearchParams(Object.assign({}, p, { pagina: i })) + '">' + i + '</a> ';
+          c.innerHTML = '<div class="card"><div class="header"><legend class="title">MIS TRÁMITES · ' + esc(sesion.datos.area) + '</legend></div><div class="content">' +
+            mensaje +
+            '<form class="filtros" method="get">' +
+              '<label>Expediente<input name="numero" value="' + esc(p.numero || '') + '" placeholder="2026 - 00000 - 0"></label>' +
+              '<label>Asunto<input name="asunto" value="' + esc(p.asunto || '') + '"></label>' +
+              '<label>Estado<select name="estado">' + SGD_OPCIONES(SGD.ESTADOS, p.estado, 'Todos') + '</select></label>' +
+              '<label class="check"><input type="checkbox" name="mios" value="1"' + (p.mios === '1' ? ' checked' : '') + '> Asignados a mí</label>' +
+              '<label class="check"><input type="checkbox" name="cerrados" value="1"' + (p.cerrados === '1' ? ' checked' : '') + '> Incluir archivados</label>' +
+              '<button class="btn" type="submit">Filtrar</button></form>' +
+            '<table class="table table-xs table-hover scroll-table"><thead><tr><th></th><th>Expediente</th><th>Fecha de Solicitud</th><th>Remitente</th><th>Derivado a</th><th>Asunto</th><th>Estado</th><th>Adjuntos</th><th>Acciones</th></tr></thead><tbody>' +
+            (r.filas.length ? r.filas.map(function (t, i) {
+              return '<tr' + (t.estado === 'DERIVADO' ? ' class="por-recibir"' : '') + '><td>' + ((r.pagina - 1) * r.porPagina + i + 1) + '</td><td><p class="scroll-table-td-p">' + esc(t.numeroVisible) + '</p></td><td>' + esc(t.fechaIngreso) + '</td><td>' + esc(t.remitente) + '</td><td>' + esc(t.areaActual) + (t.asignadoA ? '<br><small>' + esc(t.asignadoA) + '</small>' : '') +
+                '</td><td>' + esc(t.asunto) + '</td><td><span class="badge">' + esc(t.estado) + '</span> ' + SGD_SEMAFORO(t.semaforo) + '</td><td>' + (t.adjuntos.length || '—') + '</td>' +
+                '<td><a href="' + SGD_BASE + '/tramites/detalletramite/' + t.id + '" target="_self" title="Ingresar al Tramite">Ingresar</a>' +
+                (t.acciones.indexOf('recibir') >= 0 ? ' · <a href="#" data-recibir="' + t.id + '">Recibir</a>' : '') + '</td></tr>';
+            }).join('') : '<tr><td colspan="9">No hay trámites en su bandeja con esos filtros.</td></tr>') +
+            '</tbody></table><div class="paginador">' + r.total + ' trámite(s) · Página ' + paginas + '</div></div></div>';
+        });
+      }
+      c.addEventListener('click', function (e) {
+        var a = e.target.closest('a[data-recibir]');
+        if (!a) return;
+        e.preventDefault();
+        SGD_ACCION(function (m) { return m.recibir(Number(a.dataset.recibir), sesion.usuario); })
+          .then(function (t) { mensaje = SGD_MENSAJE('Trámite ' + t.numero + ' recibido.'); }, function (x) { mensaje = SGD_MENSAJE(x); })
+          .then(pintar);
+      });
+      pintar();
+    });
   </script>
 </body>
 </html>

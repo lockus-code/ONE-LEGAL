@@ -26,8 +26,13 @@ func entorno(t *testing.T) (*Servidor, *cliente) {
 	}
 	t.Cleanup(func() { bd.Cerrar() })
 	web, _ := fs.Sub(webEmbebido, "web")
-	cfg := Config{Puerto: 8790, URLPublica: "http://192.168.1.10:8790", SGDURLs: []string{"https://sgd.sedapar.com.pe/"}, SGDSimulado: true, AdminUsuario: "admin", AdminClave: "admin", SesionHoras: 1}
+	cfg := Config{Puerto: 8790, URLPublica: "http://192.168.1.10:8790", SGDURLs: []string{"https://sgd.sedapar.com.pe/"}, SGDSimulado: true, AdminUsuario: "admin", AdminClave: "admin", SesionHoras: 1, DirDatos: t.TempDir()}
 	s := &Servidor{bd: bd, cfg: cfg, web: web, version: "prueba", iniciado: time.Now()}
+	t.Cleanup(func() {
+		if s.sgd != nil {
+			s.sgd.cerrar()
+		}
+	})
 	if err := s.inicializar(); err != nil {
 		t.Fatal(err)
 	}

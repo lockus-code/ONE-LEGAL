@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<body>
+  <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
+  <script src="/sgd-simulado/datos.js"></script>
+  <script>
+    // Nuevo trámite (interno; externo si el perfil es Mesa de Partes). ?expediente=AAAA-##### agrega un documento a ese expediente; ?asociarA=n.º lo asocia.
+    SGD_INICIAR().then(function () {
+      var sesion = SGD_SESION.exigir();
+      if (!sesion) return;
+      var u = sesion.datos;
+      var c = SGD_LAYOUT(sesion, 'app-nuevotramiteint');
+      var p = SGD_PARAMETROS();
+      var externo = u.perfil === 'MESA_PARTES';
+      if (SGD.PERFILES[u.perfil].acciones.indexOf('registrar') < 0) { c.innerHTML = SGD_MENSAJE(new SGD.SGDError('RN-02', 'Su perfil no registra trámites.')); return; }
+      c.innerHTML = SGD_CARD('NUEVO TRÁMITE ' + (externo ? 'EXTERNO' : 'INTERNO') + ' · ' + esc(u.area),
+        '<div id="mensaje"></div><form id="nuevo" class="formulario" method="get">' +
+        '<label>Tipo de documento<select name="tipo" required>' + SGD_OPCIONES(SGD.CATALOGOS.tipos, '', 'Seleccione…') + '</select></label>' +
+        '<label>Asunto<textarea name="asunto" rows="2" required minlength="' + SGD.LIMITES.longitud.asuntoMin + '" maxlength="' + SGD.LIMITES.longitud.asuntoMax + '"></textarea></label>' +
+        '<label>Contenido<textarea name="contenido" rows="4"></textarea></label>' +
+        '<label>Agregar al expediente existente (opcional)<input name="expediente" value="' + esc(p.expediente || '') + '" placeholder="AAAA-#####"></label>' +
+        '<label>Asociar al trámite (opcional)<input name="asociarA" value="' + esc(p.asociarA || '') + '" placeholder="AAAA - ##### - S"></label>' +
+        (externo ? '<fieldset><legend>Solicitante (ficticio)</legend><label>Nombre<input name="sNombre" value="PERSONA DE PRUEBA"></label><label>Dirección<input name="sDireccion" value="AV. EJEMPLO 000"></label><label>Email<input name="sEmail" value="persona@ejemplo.invalid"></label><label>Celular<input name="sCelular" value="900 000 000"></label></fieldset>' : '') +
+        '<label class="check"><input type="checkbox" name="confidencial"> Confidencial</label>' +
+        '<fieldset><legend>Documento principal (opcional)</legend><label>Archivo<input type="file" name="archivo" accept=".' + SGD.LIMITES.adjuntos.extensiones.join(',.') + '"></label><label>o texto del documento<textarea name="texto" rows="6" placeholder="Se guardará como documento .txt"></textarea></label></fieldset>' +
+        '<fieldset><legend>Derivar al registrar (opcional)</legend><label>Área destino<select name="areaDestino">' + SGD_OPCIONES(SGD.CATALOGOS.areas.filter(function (a) { return a !== u.area; }), '', 'No derivar todavía') + '</select></label>' +
+        '<label>Usuario destino<select name="usuarioDestino"><option value="">Cualquiera del área</option></select></label>' +
+        '<label>Plazo (días hábiles)<input type="number" name="plazoDias" value="' + SGD.LIMITES.plazo.porDefecto + '" min="1" max="30"></label><label>Proveído<input name="proveido" value="Para su atención"></label></fieldset>' +
+        '<div class="botones"><button class="btn" type="submit">Registrar</button></div></form>');
+      var form = document.getElementById('nuevo');
+      form.areaDestino.addEventListener('change', function () {
+        form.usuarioDestino.innerHTML = '<option value="">Cualquiera del área</option>' + SGD_OPCIONES(SGD_APP.usuarios(form.areaDestino.value).filter(function (x) { return x.activo; }).map(function (x) { return { valor: x.usuario, texto: x.usuario + ' · ' + x.perfil }; }));
+      });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var d = Object.fromEntries(new FormData(form));
+        var archivo = form.archivo.files[0];
+        var aviso = document.getElementById('mensaje');
+        var subida = archivo ? SGD_SUBIR(archivo) : Promise.resolve(null);
+        subida.then(function (ref) {
+          return SGD_ACCION(function (m) {
+            var datos = { tipo: d.tipo, asunto: d.asunto, contenido: d.contenido, confidencial: form.confidencial.checked, expediente: d.expediente.trim() || null, asociarA: d.asociarA.trim() || null };
+            if (externo) datos.solicitante = { nombre: d.sNombre, direccion: d.sDireccion, email: d.sEmail, celular: d.sCelular };
+            // Todo o nada: si una regla falla al adjuntar o derivar, no se guarda el registro.
+            var copia = m.exportar();
+            try {
+              var t = m.registrar(datos, sesion.usuario);
+              if (ref) m.adjuntar(t.id, Object.assign({ nombre: archivo.name, bytes: archivo.size, descripcion: 'Documento principal' }, ref), sesion.usuario);
+              else if (d.texto.trim()) m.adjuntar(t.id, { nombre: d.tipo.normalize('NFD').replace(/[̀-ͯ]/g, '') + '-' + t.numero + '.txt', texto: d.texto, descripcion: 'Documento principal' }, sesion.usuario);
+              if (d.areaDestino) m.derivar(t.id, { areaDestino: d.areaDestino, usuarioDestino: d.usuarioDestino || null, plazoDias: Number(d.plazoDias), proveido: d.proveido }, sesion.usuario);
+              return t;
+            } catch (x) {
+              var bitacora = m.bitacora();
+              copia.bitacora = bitacora; // se conserva el rechazo en la bitácora (RN-21)
+              m.importar(copia);
+              throw x;
+            }
+          });
+        }).then(function (t) {
+          location.href = SGD_BASE + '/tramites/detalletramite/' + t.id;
+        }, function (x) { aviso.innerHTML = SGD_MENSAJE(x); aviso.scrollIntoView(); });
+      });
+    });
+  </script>
+</body>
+</html>

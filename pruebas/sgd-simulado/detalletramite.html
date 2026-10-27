@@ -1,42 +1,253 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SGD Simulado</title><link rel="stylesheet" href="/sgd-simulado/estilos.css"></head>
 <body>
   <app-root ng-version="12.2.16"></app-root>
+  <script src="/sgd-simulado/nucleo.js"></script>
+  <script src="/sgd-simulado/escenarios.js"></script>
   <script src="/sgd-simulado/datos.js"></script>
   <script>
-    var sesion = SGD_SESION.exigir();
-    if (sesion) {
+    /*
+     * Detalle del trámite. La cabecera conserva la estructura del SGD de SEDAPAR que
+     * leen los lectores (docs/11 §3.2): legend.title > .row > .col-sm-5 > <strong>número</strong>.
+     * Las variantes de escenario (render) alteran esa estructura a propósito.
+     * Las acciones van en tarjetas aparte para no contaminar la tarjeta del expediente.
+     */
+    SGD_INICIAR().then(function () {
+      var sesion = SGD_SESION.exigir();
+      if (!sesion) return;
+      var usuario = sesion.usuario;
       var id = Number(location.pathname.match(/detalletramite\/(\d+)/)[1]);
-      var t = SGD_TRAMITES.find(function (x) { return x.id === id; });
       var c = SGD_LAYOUT(sesion, 'app-detalletramite');
-      c.innerHTML = '<div class="cargando">Cargando trámite…</div>';
-      setTimeout(function () { // imita getTramite (~1 s)
-        if (!t) { c.innerHTML = '<div class="cargando">Trámite no encontrado.</div>'; return; }
-        var card = function (titulo, cuerpo) { return '<div class="card"><div class="header"><legend class="title">' + titulo + '</legend></div><div class="content">' + cuerpo + '</div></div>'; };
+      var mensaje = '';
+      var accionAbierta = null;
+      var visor = null; // índice del adjunto abierto
+      var vistaActual = null;
+      var U = SGD.utilidades;
+
+      function campo(rotulo, valor) {
+        return '<div class="form-group"><label>' + rotulo + '</label><p class="text-muted"> ' + valor + ' </p></div>';
+      }
+
+      function cabecera(t) {
+        var r = t.render || {};
+        var numero = esc(U.formatearNumero(t.numero, { separador: r.separador, sinCeros: r.sinCeros }));
+        var nodo = r.numeroEn === 'span' ? '<span class="numero">' + numero + '</span>' : '<strong>' + numero + '</strong>';
+        return '<div class="card"><div class="header"><legend class="title"><div class="row">' +
+          '<div class="col-sm-5">' + esc(r.rotulo || 'DATOS DEL EXPEDIENTE') + ' ' + nodo + ' <i class="fa fa-file-pdf-o" title="PDF"></i></div>' +
+          '<div class="col-sm-7" style="text-align:right">' + esc(t.tipo) + ' · <span class="badge">' + esc(t.estado) + '</span> ' + SGD_SEMAFORO(t.semaforo) + '</div></div></legend></div>' +
+          '<div class="content">' +
+            campo('ASUNTO', esc(t.asunto)) +
+            campo('CONTENIDO', esc(t.contenido || '—')) +
+            '<div class="datos-fila">' +
+              campo('ORIGEN', esc(t.origen + ' · ' + t.areaOrigen)) +
+              campo('ÁREA ACTUAL', esc(t.areaActual) + (t.asignadoA ? ' · ' + esc(t.asignadoA) : '')) +
+              campo('FECHA LÍMITE', esc(t.fechaLimite || '—')) +
+            '</div>' +
+            '<form method="get"><select name="firmamotivo" disabled><option>Soy el autor del documento</option></select></form>' +
+          '</div></div>';
+      }
+
+      function solicitante(t) {
+        var s = t.solicitante;
+        var cuerpo = s
+          ? '<div class="campo"><b>SOLICITANTE</b>' + esc(s.nombre) + '</div><div class="campo"><b>DIRECCIÓN</b>' + esc(s.direccion) + '</div>' +
+            '<div class="campo"><b>EMAIL</b>' + esc(s.email) + '</div><div class="campo"><b>CELULAR</b>' + esc(s.celular) + '</div>'
+          : '<div class="campo"><b>SOLICITANTE</b>' + esc(t.reservado ? '—' : t.areaOrigen) + ' (trámite ' + (t.origen === 'EXTERNO' ? 'externo' : 'interno') + ')</div>';
+        var previa = t.render && t.render.legendPrevia
+          ? '<div class="card"><div class="header"><legend class="title"><div class="row"><div class="col-sm-5">REFERENCIA <strong>' + esc(t.render.legendPrevia) + '</strong></div></div></legend></div><div class="content">Documento de referencia (variante de plantilla)</div></div>'
+          : '';
+        return previa + SGD_CARD('DATOS DEL SOLICITANTE', cuerpo);
+      }
+
+      var ETIQUETAS = { derivar: 'Derivar', recibir: 'Recibir', iniciar: 'Iniciar atención', observar: 'Observar y devolver', atender: 'Atender', archivar: 'Archivar', desarchivar: 'Desarchivar', anular: 'Anular', adjuntar: 'Adjuntar documento', asociar: 'Asociar trámite', confidencial: 'Confidencialidad' };
+
+      function formulario(t, a) {
+        var motivo = function (rotulo) { return '<label>' + rotulo + '<textarea name="motivo" rows="3" required minlength="' + SGD.LIMITES.longitud.motivoMin + '" maxlength="' + SGD.LIMITES.longitud.motivoMax + '"></textarea></label>'; };
+        var cuerpo = {
+          derivar: function () {
+            return '<label>Área destino<select name="areaDestino" required>' + SGD_OPCIONES(SGD.CATALOGOS.areas.filter(function (x) { return x !== t.areaActual; }), '', 'Seleccione…') + '</select></label>' +
+              '<label>Usuario destino (opcional)<select name="usuarioDestino"><option value="">Cualquiera del área</option></select></label>' +
+              '<label>Plazo (días hábiles)<input name="plazoDias" type="number" min="' + SGD.LIMITES.plazo.minDias + '" max="' + SGD.LIMITES.plazo.maxDias + '" value="' + SGD.LIMITES.plazo.porDefecto + '"></label>' +
+              '<label>Proveído<textarea name="proveido" rows="3" required maxlength="' + SGD.LIMITES.longitud.proveidoMax + '" placeholder="Para su atención y fines"></textarea></label>';
+          },
+          recibir: function () { return '<p>Registra la recepción y la «Fecha leído» de la derivación.</p>'; },
+          iniciar: function () { return '<p>El trámite pasa a EN PROCESO.</p>'; },
+          observar: function () { return '<p>Se devuelve al área que lo derivó.</p>' + motivo('Motivo de la observación'); },
+          atender: function () { return '<label>Respuesta o conclusión (opcional)<textarea name="motivo" rows="3" maxlength="' + SGD.LIMITES.longitud.motivoMax + '"></textarea></label>'; },
+          archivar: function () { return motivo('Motivo del archivo'); },
+          desarchivar: function () { return motivo('Motivo del desarchivo'); },
+          anular: function () { return motivo('Motivo de la anulación'); },
+          adjuntar: function () {
+            return '<div class="pestanas"><label class="check"><input type="radio" name="modo" value="archivo" checked> Subir archivo</label><label class="check"><input type="radio" name="modo" value="texto"> Redactar documento de texto</label></div>' +
+              '<div data-modo="archivo"><label>Archivo (' + SGD.LIMITES.adjuntos.extensiones.join(', ') + '; máx. 20 MB)<input name="archivo" type="file" accept=".' + SGD.LIMITES.adjuntos.extensiones.join(',.') + '"></label></div>' +
+              '<div data-modo="texto" hidden><label>Nombre del documento<input name="nombreTexto" value="DOCUMENTO-' + Date.now().toString(36).toUpperCase() + '.txt"></label>' +
+              '<label>Texto<textarea name="texto" rows="10" placeholder="INFORME N.° …"></textarea></label></div>' +
+              '<label>Descripción<input name="descripcion" maxlength="200"></label>' +
+              '<label class="check"><input type="checkbox" name="publico" checked> Público</label>';
+          },
+          asociar: function () { return '<label>N.º del trámite a asociar<input name="numero" required placeholder="AAAA - ##### - S"></label>'; },
+          confidencial: function () { return '<label class="check"><input type="checkbox" name="valor"' + (t.confidencial ? ' checked' : '') + '> Trámite confidencial (otras áreas verán «' + SGD.ASUNTO_RESERVADO + '»)</label>'; }
+        }[a]();
+        return '<form class="form-accion" data-accion="' + a + '" method="get"><h4>' + ETIQUETAS[a] + '</h4>' + cuerpo +
+          '<div class="botones"><button class="btn" type="submit">' + ETIQUETAS[a] + '</button> <button class="btn btn-secundario" type="button" data-cancelar>Cancelar</button></div></form>';
+      }
+
+      function acciones(t) {
+        var botones = t.acciones.map(function (a) { return '<button class="btn' + (accionAbierta === a ? ' activo' : '') + '" type="button" data-abrir="' + a + '">' + ETIQUETAS[a] + '</button>'; });
+        if (SGD.PERFILES[sesion.datos.perfil].acciones.indexOf('registrar') >= 0 && !t.reservado) {
+          var exp = t.numero.split('-').slice(0, 2).join('-');
+          botones.push('<a class="btn btn-secundario" href="' + SGD_BASE + '/tramites/nuevotramiteint?expediente=' + exp + '">Agregar documento al expediente</a>');
+          botones.push('<a class="btn btn-secundario" href="' + SGD_BASE + '/tramites/nuevotramiteint?asociarA=' + t.numero + '">Responder con nuevo trámite</a>');
+        }
+        var cuerpo = (botones.length ? '<div class="botones">' + botones.join(' ') + '</div>' : '<p class="text-muted">Su usuario no tiene acciones disponibles sobre este trámite (' + esc(t.estado) + ' en ' + esc(t.areaActual) + ').</p>') +
+          (accionAbierta ? formulario(t, accionAbierta) : '');
+        return SGD_CARD('ACCIONES', cuerpo, 'card-acciones');
+      }
+
+      function archivos(t) {
+        if (t.reservado) return SGD_CARD('ARCHIVOS', '<p class="text-muted">Adjuntos reservados.</p>');
+        var filas = t.adjuntos.length ? t.adjuntos.map(function (a, i) {
+          return '<tr><td>' + esc(a.fecha) + '</td><td>' + esc(a.area) + '</td><td>' + esc(a.usuario) + '</td><td>' + esc(a.nombre) + '<br><small>' + SGD_BYTES(a.bytes) + '</small></td><td>' + esc(a.descripcion || '—') + '</td><td>' + (a.publico ? 'Sí' : 'No') + '</td>' +
+            '<td><a href="#" data-ver="' + i + '">Ver</a> · <a href="#" data-descargar="' + i + '">Descargar</a></td></tr>';
+        }).join('') : '<tr><td colspan="7">Sin archivos</td></tr>';
+        return SGD_CARD('ARCHIVOS', '<table class="table"><thead><tr><th>Fecha</th><th>Área</th><th>Usuario</th><th>Archivo</th><th>Descripción</th><th>Público</th><th></th></tr></thead><tbody>' + filas + '</tbody></table>' +
+          (visor !== null && t.adjuntos[visor] ? '<div class="visor" id="visor"><div class="visor-cabecera"><b>' + esc(t.adjuntos[visor].nombre) + '</b> <a href="#" data-cerrar-visor>Cerrar</a></div><div class="visor-cuerpo" id="visor-cuerpo">Cargando…</div></div>' : ''));
+      }
+
+      function movimientos(t) {
+        return SGD_CARD('MOVIMIENTO DEL EXPEDIENTE', '<table class="table"><thead><tr><th>Fecha</th><th>Area</th><th>Estado</th><th>Usuario</th><th>Proveído</th><th>Fecha Límite</th><th>Fecha Leído</th></tr></thead><tbody>' +
+          t.movimientosDesc.map(function (m) {
+            return '<tr><td>' + esc(m.fecha) + '</td><td>' + esc(m.area) + (m.paraUsuario ? '<br><small>→ ' + esc(m.paraUsuario) + '</small>' : '') + '</td><td>' + esc(m.estado) + '</td><td>' + esc(m.usuario) + '</td><td>' + esc(m.proveido || '') + '</td><td>' + esc(m.fechaLimite || '') + '</td><td>' + esc(m.fechaLeido || '') + '</td></tr>';
+          }).join('') + '</tbody></table>');
+      }
+
+      function asociados(t) {
+        return SGD_CARD('TRÁMITES ASOCIADOS', '<table class="table"><thead><tr><th>Trámite</th><th>Asunto</th><th>Estado</th><th></th></tr></thead><tbody>' +
+          (t.asociados.length ? t.asociados.map(function (n) {
+            var o = SGD_APP.porNumero(n);
+            var v = o && SGD_APP.detalleSinEfectos(o.id, usuario);
+            return '<tr><td>' + esc(U.formatearNumero(n)) + '</td><td>' + esc(v ? v.asunto : '—') + '</td><td>' + esc(v ? v.estado : '—') + '</td><td>' + (o ? '<a href="' + SGD_BASE + '/tramites/detalletramite/' + o.id + '" target="_self">Ingresar</a>' : '') + '</td></tr>';
+          }).join('') : '<tr><td colspan="4">Sin trámites asociados</td></tr>') + '</tbody></table>');
+      }
+
+      function pintar(t) {
+        vistaActual = t;
         c.innerHTML =
           '<div class="main-content"><div class="container-fluid">' +
           '<tramites-detalle-tramite-confidential>' + (t.confidencial ? '<div class="confidencial">TRÁMITE CONFIDENCIAL</div>' : '') + '</tramites-detalle-tramite-confidential>' +
+          mensaje +
           '<div class="row">' +
-            '<div class="col-md-6">' + card('DATOS DEL SOLICITANTE',
-              '<div class="campo"><b>SOLICITANTE</b>PERSONA DE PRUEBA FICTICIA</div><div class="campo"><b>DIRECCIÓN</b>AV. EJEMPLO 000</div>' +
-              '<div class="campo"><b>EMAIL</b>persona@ejemplo.invalid</div><div class="campo"><b>CELULAR</b>900 000 000</div>') + '</div>' +
-            '<div class="col-md-6"><div class="row"><div class="col-md-12"><div class="card"><div class="header"><legend class="title"><div class="row">' +
-              '<div class="col-sm-5">DATOS DEL EXPEDIENTE <strong>' + t.numero + '</strong> <i class="fa fa-file-pdf-o" title="PDF"></i></div>' +
-              '<div class="col-sm-7" style="text-align:right">' + t.tipo + '</div></div></legend></div>' +
-              '<div class="content"><div class="form-group"><label _ngcontent-bin-c58="">ASUNTO</label><p _ngcontent-bin-c58="" class="text-muted"> ' + t.asunto + ' </p></div>' +
-              '<div class="form-group"><label _ngcontent-bin-c58="">CONTENIDO</label><p _ngcontent-bin-c58="" class="text-muted"> Texto de prueba del contenido del documento. </p></div>' +
-              '<form method="get"><select name="firmamotivo" disabled><option>Soy el autor del documento</option></select> <button type="button" class="btn">Derivar</button></form></div></div></div></div></div>' +
+            '<div class="col-md-6">' + solicitante(t) + '</div>' +
+            '<div class="col-md-6"><div class="row"><div class="col-md-12">' + cabecera(t) + '</div></div></div>' +
           '</div>' +
-          '<div class="row"><div class="col-md-12">' +
-            card('MOVIMIENTO DEL EXPEDIENTE', '<table class="table"><thead><tr><th>Fecha</th><th>Area</th><th>Estado</th><th>Usuario</th></tr></thead><tbody>' +
-              '<tr><td>14/10/2026 10:05:11</td><td>GERENCIA DE ASESORÍA JURÍDICA</td><td>' + t.estado + '</td><td>USUARIO FICTICIO 2</td></tr>' +
-              '<tr><td>' + t.fecha + '</td><td>TRÁMITE DOCUMENTARIO</td><td>REGISTRADO</td><td>USUARIO FICTICIO 1</td></tr></tbody></table>') +
-            card('TRÁMITES ASOCIADOS', '<table class="table"><thead><tr><th>Trámite</th><th>Asunto</th></tr></thead><tbody>' +
-              (t.asociados.length ? t.asociados.map(function (a) { return '<tr><td>' + a + '</td><td>Documento asociado de prueba</td></tr>'; }).join('') : '<tr><td colspan="2">Sin trámites asociados</td></tr>') + '</tbody></table>') +
-          '</div></div></div></div>';
-      }, 1100);
-    }
+          '<div class="row"><div class="col-md-12">' + acciones(t) + archivos(t) + movimientos(t) + asociados(t) + '</div></div>' +
+          '<p><a href="' + SGD_BASE + '/tramites/mistramites">« Volver a Mis Trámites</a></p>' +
+          '</div></div>';
+        if (visor !== null && t.adjuntos[visor]) mostrarVisor(t.adjuntos[visor]);
+      }
+
+      function mostrarVisor(a) {
+        var cuerpo = document.getElementById('visor-cuerpo');
+        var url = function () { return a.datos ? fetch(a.datos).then(function (r) { return r.blob(); }).then(function (b) { return URL.createObjectURL(b); }) : Promise.resolve(SGD_URL_ADJUNTO(a)); };
+        if (a.extension === 'txt') {
+          var texto = typeof a.texto === 'string' ? Promise.resolve(a.texto) : fetch(SGD_URL_ADJUNTO(a)).then(function (r) { return r.text(); });
+          texto.then(function (x) { cuerpo.innerHTML = '<pre class="documento">' + esc(x) + '</pre>'; }, function () { cuerpo.textContent = 'No se pudo leer el documento.'; });
+        } else if (a.extension === 'pdf') {
+          url().then(function (u) { cuerpo.innerHTML = '<p class="text-muted"><a href="' + esc(u) + '" target="_blank" rel="noopener">Abrir en pestaña nueva</a> (si su navegador no muestra el PDF aquí)</p><iframe class="visor-pdf" title="' + esc(a.nombre) + '" src="' + esc(u) + '"></iframe>'; });
+        } else if (a.extension === 'jpg' || a.extension === 'png') {
+          url().then(function (u) { cuerpo.innerHTML = '<img class="visor-img" alt="' + esc(a.nombre) + '" src="' + esc(u) + '">'; });
+        } else {
+          cuerpo.innerHTML = '<p>Vista previa no disponible para .' + esc(a.extension) + '. Use «Descargar».</p>';
+        }
+      }
+
+      function descargar(a) {
+        var enlace = document.createElement('a');
+        enlace.href = SGD_URL_ADJUNTO(a, true);
+        enlace.download = a.nombre;
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+      }
+
+      function refrescar(texto) {
+        mensaje = texto ? SGD_MENSAJE(texto) : '';
+        pintar(SGD_APP.detalleSinEfectos(id, usuario));
+      }
+
+      function ejecutar(form) {
+        var a = form.dataset.accion;
+        var d = Object.fromEntries(new FormData(form));
+        var listo = function (t, texto) { accionAbierta = null; refrescar(texto); };
+        var falla = function (x) { refrescar(x); };
+        if (a === 'adjuntar') {
+          var publico = form.publico.checked;
+          if (d.modo === 'texto') {
+            return SGD_ACCION(function (m) { return m.adjuntar(id, { nombre: d.nombreTexto, texto: form.texto.value, descripcion: d.descripcion, publico: publico }, usuario); })
+              .then(function (t) { listo(t, 'Documento ' + d.nombreTexto + ' guardado.'); }, falla);
+          }
+          var archivo = form.archivo.files[0];
+          if (!archivo) return falla(new SGD.SGDError('RN-14', 'Seleccione un archivo.'));
+          // Valida las reglas antes de subir, para no dejar archivos huérfanos.
+          try {
+            SGD.crear({ almacen: { leer: function () { return SGD_APP.exportar(); }, escribir: function () {} } })
+              .adjuntar(id, { nombre: archivo.name, bytes: archivo.size, archivoId: 'validacion' }, usuario);
+          } catch (x) { return falla(x); }
+          mensaje = SGD_MENSAJE('Subiendo ' + archivo.name + '…');
+          return SGD_SUBIR(archivo)
+            .then(function (ref) { return SGD_ACCION(function (m) { return m.adjuntar(id, Object.assign({ nombre: archivo.name, bytes: archivo.size, descripcion: d.descripcion, publico: publico }, ref), usuario); }); })
+            .then(function (t) { listo(t, 'Archivo ' + archivo.name + ' adjuntado.'); }, falla);
+        }
+        var ejecutor = {
+          derivar: function (m) { return m.derivar(id, { areaDestino: d.areaDestino, usuarioDestino: d.usuarioDestino || null, plazoDias: Number(d.plazoDias), proveido: d.proveido }, usuario); },
+          recibir: function (m) { return m.recibir(id, usuario); },
+          asociar: function (m) { return m.asociar(id, d.numero, usuario); },
+          confidencial: function (m) { return m.marcarConfidencial(id, form.valor.checked, usuario); }
+        }[a] || function (m) { return m[a](id, { motivo: d.motivo }, usuario); };
+        SGD_ACCION(ejecutor).then(function (t) {
+          var textos = { derivar: 'Trámite derivado a ' + d.areaDestino + '.', recibir: 'Trámite recibido.', asociar: 'Trámites asociados.', confidencial: 'Confidencialidad actualizada.' };
+          listo(t, textos[a] || ETIQUETAS[a] + ': hecho. Estado actual: ' + t.estado + '.');
+        }, falla);
+      }
+
+      c.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-abrir],[data-cancelar],[data-ver],[data-descargar],[data-cerrar-visor]');
+        if (!b) return;
+        e.preventDefault();
+        if (b.dataset.abrir) { accionAbierta = accionAbierta === b.dataset.abrir ? null : b.dataset.abrir; refrescar(); }
+        else if (b.hasAttribute('data-cancelar')) { accionAbierta = null; refrescar(); }
+        else if (b.dataset.ver) { visor = Number(b.dataset.ver); refrescar(); document.getElementById('visor').scrollIntoView({ behavior: 'smooth' }); }
+        else if (b.dataset.descargar) descargar(vistaActual.adjuntos[Number(b.dataset.descargar)]);
+        else { visor = null; refrescar(); }
+      });
+      c.addEventListener('change', function (e) {
+        var f = e.target.form;
+        if (!f) return;
+        if (e.target.name === 'areaDestino') {
+          f.usuarioDestino.innerHTML = '<option value="">Cualquiera del área</option>' + SGD_OPCIONES(SGD_APP.usuarios(e.target.value).filter(function (x) { return x.activo; }).map(function (x) { return { valor: x.usuario, texto: x.usuario + ' · ' + x.perfil }; }));
+        }
+        if (e.target.name === 'modo') {
+          f.querySelectorAll('[data-modo]').forEach(function (div) { div.hidden = div.dataset.modo !== e.target.value; });
+        }
+      });
+      c.addEventListener('submit', function (e) {
+        if (!e.target.matches('.form-accion')) return;
+        e.preventDefault();
+        ejecutar(e.target);
+      });
+
+      c.innerHTML = '<div class="cargando">Cargando trámite…</div>';
+      // detalle() puede tener efecto de escritura (opción marcarLeidoAlAbrir, hipótesis R9), por eso va por SGD_ACCION.
+      SGD_ACCION(function (m) { return m.detalle(id, usuario); }).then(function (t) {
+        var r = (t && t.render) || {};
+        SGD_DEMORA(r.latenciaMs || 1100, function () { // imita getTramite (~1 s)
+          if (!t) { c.innerHTML = '<div class="cargando">Trámite no encontrado.</div>'; return; }
+          if (r.error) { c.innerHTML = '<div class="cargando">No se pudo cargar el trámite (error simulado del servicio getTramite).</div>'; return; }
+          pintar(t);
+        });
+      }, function (x) { c.innerHTML = SGD_MENSAJE(x); });
+    });
   </script>
 </body>
 </html>

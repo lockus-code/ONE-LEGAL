@@ -40,6 +40,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Pruebas del SGD de pruebas (reglas del núcleo)
+        run: node --test pruebas/sgd-simulado/pruebas/*.test.js
+
       - name: Construir (go vet, pruebas y binarios)
         run: servidor/construir.sh
 

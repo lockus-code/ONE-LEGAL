@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -26,7 +27,8 @@ type Servidor struct {
 	dirExt   string
 	version  string
 	iniciado time.Time
-	mu       sync.Mutex // serializa las escrituras que tocan varios documentos
+	mu       sync.Mutex  // serializa las escrituras que tocan varios documentos
+	sgd      *almacenSGD // estado y archivos del SGD de pruebas (base aparte)
 }
 
 // errAPI: error con el código HTTP con que se responde.
@@ -96,6 +98,9 @@ func (s *Servidor) Rutas() http.Handler {
 	}
 	mux.Handle("/portal/", http.StripPrefix("/portal/", estatico("portal")))
 	if s.cfg.SGDSimulado {
+		if s.sgd == nil {
+			s.sgd = &almacenSGD{ruta: filepath.Join(s.cfg.DirDatos, "sgd-pruebas.db")}
+		}
 		mux.Handle("/sgd-simulado/", s.sgdSimulado(estatico("sgd-simulado")))
 	}
 	mux.Handle("/", estatico("centro"))
@@ -1308,21 +1313,49 @@ func (s *Servidor) manejarNotificacionVista(w http.ResponseWriter, r *http.Reque
 
 // ------------------------------------------------------- SGD simulado
 
-var rutaDetalleSimulado = regexp.MustCompile(`^tramites/detalletramite/\d+/?$`)
-
-// sgdSimulado reproduce las rutas del SGD de SEDAPAR (enrutador HTML5 de Angular).
+// sgdSimulado reproduce las rutas del SGD de SEDAPAR (enrutador HTML5 de Angular)
+// según sgd-simulado/rutas.json, que comparten este servidor y el de las pruebas
+// automáticas, y atiende la API de almacenamiento compartido (sgd_pruebas.go).
 func (s *Servidor) sgdSimulado(archivos http.Handler) http.Handler {
-	paginas := map[string]string{
-		"":                     "login.html",
-		"pages/login":          "login.html",
-		"pages/login/exit":     "salir.html",
-		"tramites/mistramites": "mistramites.html",
+	var rutas struct {
+		Paginas  map[string]string `json:"paginas"`
+		Patrones []struct {
+			Patron string `json:"patron"`
+			Pagina string `json:"pagina"`
+		} `json:"patrones"`
+	}
+	b, err := fs.ReadFile(s.web, "sgd-simulado/rutas.json")
+	if err == nil {
+		err = json.Unmarshal(b, &rutas)
+	}
+	if err != nil {
+		panic("sgd-simulado/rutas.json: " + err.Error())
+	}
+	type patron struct {
+		re     *regexp.Regexp
+		pagina string
+	}
+	patrones := []patron{}
+	for _, p := range rutas.Patrones {
+		patrones = append(patrones, patron{regexp.MustCompile(p.Patron), p.Pagina})
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ruta := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/sgd-simulado/"), "/")
-		pagina, ok := paginas[ruta]
-		if !ok && rutaDetalleSimulado.MatchString(ruta) {
-			pagina, ok = "detalletramite.html", true
+		if strings.HasPrefix(ruta, "api/") {
+			// Las escrituras exigen una cabecera propia: obliga a una consulta previa
+			// CORS, así que otra página no puede escribir aquí desde el navegador.
+			if r.Method != http.MethodGet && r.Header.Get("X-SGD-Pruebas") != "1" {
+				rechazar(w, http.StatusForbidden, "Falta la cabecera X-SGD-Pruebas.")
+				return
+			}
+			s.manejarAPISGD(w, r, strings.TrimPrefix(ruta, "api/"))
+			return
+		}
+		pagina, ok := rutas.Paginas[ruta]
+		for _, p := range patrones {
+			if !ok && p.re.MatchString(ruta) {
+				pagina, ok = p.pagina, true
+			}
 		}
 		r2 := r.Clone(r.Context())
 		if ok {

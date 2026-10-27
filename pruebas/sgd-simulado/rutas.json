@@ -1,0 +1,16 @@
+{
+  "descripcion": "Rutas del SGD de pruebas (imitan el enrutador HTML5 de Angular del SGD de SEDAPAR). Las usan servidor/api.go y pruebas/sgd-simulado/pruebas/servidor-local.js.",
+  "paginas": {
+    "": "login.html",
+    "pages/login": "login.html",
+    "pages/login/exit": "salir.html",
+    "dashboard": "dashboard.html",
+    "tramites/mistramites": "mistramites.html",
+    "tramites/listadotramites": "listadotramites.html",
+    "tramites/nuevotramiteint": "nuevotramiteint.html",
+    "consola": "consola.html"
+  },
+  "patrones": [
+    { "patron": "^tramites/detalletramite/\\d+/?$", "pagina": "detalletramite.html" }
+  ]
+}
